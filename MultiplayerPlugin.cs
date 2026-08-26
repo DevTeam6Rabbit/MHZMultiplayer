@@ -60,6 +60,9 @@ namespace MHZombieMultiplayer
 
             // Install the time trial scoreboard hook independently of the
             // Harmony patches above, and refresh state on every scene load.
+            // Separate on purpose: if PatchAll up there dies (it has), these
+            // still come up. Each install is idempotent so calling it on every
+            // scene load is harmless.
             UnityEngine.SceneManagement.SceneManager.sceneLoaded += (scene, mode) =>
             {
                 HeliLocator.Invalidate();

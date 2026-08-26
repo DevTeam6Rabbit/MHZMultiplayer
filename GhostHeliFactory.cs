@@ -9,6 +9,14 @@ namespace MHZombieMultiplayer
     /// mesh-only copy of the heli's visuals: no game scripts, no colliders,
     /// nothing that can break or interfere - just the meshes and materials.
     /// </summary>
+    // History lesson so nobody repeats my mistakes: v1 of this just did
+    // Instantiate() on the whole local heli and then tried to delete all the
+    // game scripts off the clone. Terrible idea - the model didn't even render
+    // because the controller script lives on a child object with no meshes
+    // under it, so we were cloning an invisible object and fighting its
+    // leftover scripts for nothing. Copying ONLY the meshes into a fresh
+    // object turned out to be way more reliable: nothing to strip, nothing to
+    // break, and the game can't tell it exists.
     public static class GhostHeliFactory
     {
         public static GameObject Create(CSteamID ownerId)
@@ -59,6 +67,11 @@ namespace MHZombieMultiplayer
         /// meshes may live elsewhere in the hierarchy. Walk upward until we find
         /// a level that actually has renderers beneath it.
         /// </summary>
+        // HeliLocator hands us whatever object has the heli controller script
+        // on it, but that's not where the meshes are (found out the hard way -
+        // the controller sits on 'Main_Engine', the actual model is on a parent
+        // called 'AHZ'). So we just walk up the hierarchy until we find a level
+        // that actually has renderers somewhere under it.
         private static Transform FindVisualRoot(GameObject located)
         {
             if (located == null) return null;
@@ -91,7 +104,9 @@ namespace MHZombieMultiplayer
                 count++;
             }
 
-            // Skinned meshes are copied as static meshes in bind pose - fine for a vehicle
+            // Skinned meshes are copied as static meshes in bind pose. For a
+            // character that would look like a T-posing mannequin, but helis
+            // are rigid so nobody will ever notice.
             foreach (SkinnedMeshRenderer src in sourceRoot.GetComponentsInChildren<SkinnedMeshRenderer>(true))
             {
                 if (src.sharedMesh == null) continue;

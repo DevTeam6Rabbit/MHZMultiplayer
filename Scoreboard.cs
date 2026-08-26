@@ -38,6 +38,9 @@ namespace MHZombieMultiplayer
             LobbyUI.Instance?.ShowScoreboard();
         }
 
+        // one row per player, best time wins. a slower run never replaces a
+        // faster one - if you want a full run history instead, delete the
+        // FindIndex block below and every finish becomes its own row.
         private static void AddEntry(string name, float timeSeconds)
         {
             // Keep only each player's best time
@@ -72,6 +75,12 @@ namespace MHZombieMultiplayer
     /// EndRound() copies it into "endTime" when the run completes - so we
     /// postfix EndRound and read endTime for the final result.
     /// </summary>
+    // How we know a race finished: we disassembled the game and found that
+    // RW_Race.EndRound() copies the live timer field ("time") into "endTime"
+    // when a run completes. So we harmony-postfix EndRound and read endTime.
+    // Don't be tempted to grab just any field with "time" in the name - the
+    // same class has maxTime (the par time) which is NOT your result. Ask me
+    // how I know.
     public static class TimeTrialHook
     {
         private static bool _installed;
@@ -80,6 +89,10 @@ namespace MHZombieMultiplayer
         private static FieldInfo _timeField;
 
         /// <summary>Finds a game type by full name, falling back to a scan by simple name.</summary>
+        // Every game class lives in the "Raulworks" namespace, which cost us
+        // an evening once: asm.GetType("RW_Race") returns null, it has to be
+        // "Raulworks.RW_Race". The fallback scan by simple name is there so a
+        // game update moving things around doesn't silently kill the mod.
         public static Type FindGameType(string fullName, string simpleName)
         {
             foreach (Assembly asm in AppDomain.CurrentDomain.GetAssemblies())
