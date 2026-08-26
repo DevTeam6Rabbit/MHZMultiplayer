@@ -38,6 +38,9 @@ namespace MHZombieMultiplayer
         // Packet channel
         private const int Channel = 0;
 
+        /// <summary>Maximum players per lobby.</summary>
+        public const int MaxPlayers = 16;
+
         private void Awake()
         {
             if (Instance != null) { Destroy(gameObject); return; }
@@ -82,7 +85,7 @@ namespace MHZombieMultiplayer
 
         public void HostLobby()
         {
-            SteamMatchmaking.CreateLobby(ELobbyType.k_ELobbyTypeFriendsOnly, 4);
+            SteamMatchmaking.CreateLobby(ELobbyType.k_ELobbyTypeFriendsOnly, MaxPlayers);
             MultiplayerPlugin.Log.LogInfo("Creating lobby...");
         }
 
