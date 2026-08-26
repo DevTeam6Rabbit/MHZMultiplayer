@@ -58,11 +58,8 @@ namespace MHZombieMultiplayer
 
             Log.LogInfo("MHZ Multiplayer loaded! Press F8 to open lobby.");
 
-            // Install the time trial scoreboard hook independently of the
-            // Harmony patches above, and refresh state on every scene load.
-            // Separate on purpose: if PatchAll up there dies, these still
-            // come up. Each install is idempotent so calling it on every
-            // scene load is harmless.
+            // kept separate from PatchAll so these survive if it dies.
+            // installs are idempotent, calling every scene load is fine.
             UnityEngine.SceneManagement.SceneManager.sceneLoaded += (scene, mode) =>
             {
                 HeliLocator.Invalidate();

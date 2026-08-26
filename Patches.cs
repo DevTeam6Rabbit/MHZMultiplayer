@@ -7,10 +7,9 @@ namespace MHZombieMultiplayer
     /// <summary>
     /// Harmony patches to hook into the game lifecycle.
     /// </summary>
-    // Careful with TargetMethod() returning null in here - if any patch class
-    // can't find its target, Harmony's PatchAll throws and takes EVERY patch
-    // down with it, even the healthy ones. That's why the important hooks
-    // install themselves separately instead of relying on PatchAll.
+    // heads up: if any TargetMethod() here returns null, PatchAll kills
+    // every patch at once. the important hooks install themselves separately
+    // because of exactly that.
     public static class Patches
     {
         // Patch RW_Game_Manager.Start to inject our UI when a game scene loads.

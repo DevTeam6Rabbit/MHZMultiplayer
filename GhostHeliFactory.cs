@@ -101,9 +101,7 @@ namespace MHZombieMultiplayer
                 count++;
             }
 
-            // Skinned meshes are copied as static meshes in bind pose. For a
-            // character that would look like a T-posing mannequin, but helis
-            // are rigid so nobody will ever notice.
+            // skinned meshes come over in bind pose - fine for a rigid vehicle
             foreach (SkinnedMeshRenderer src in sourceRoot.GetComponentsInChildren<SkinnedMeshRenderer>(true))
             {
                 if (src.sharedMesh == null) continue;

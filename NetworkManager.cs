@@ -12,11 +12,8 @@ namespace MHZombieMultiplayer
     /// Manages Steam P2P networking between players.
     /// One player hosts; others connect via Steam lobby.
     /// </summary>
-    // The whole thing is peer to peer over steam - nobody runs a server.
-    // One player makes a steam lobby, the rest join it, and then everyone
-    // just fires UDP-style packets at everyone else through steam's relay.
-    // The lobby is only used for discovery and for shared settings (steam
-    // lobby data), the actual game traffic is SendP2PPacket below.
+    // pure p2p over steam, no server. one player hosts a lobby, the rest
+    // join, then it's just packets flying between everyone.
     public class NetworkManager : MonoBehaviour
     {
         public static NetworkManager Instance { get; private set; }
@@ -36,13 +33,8 @@ namespace MHZombieMultiplayer
         public Dictionary<CSteamID, RemotePlayer> RemotePlayers { get; private set; }
             = new Dictionary<CSteamID, RemotePlayer>();
 
-        // How often (seconds) we broadcast our helicopter state.
-        // 20/sec is the sweet spot - slower gets visibly choppy even with the
-        // lerp smoothing on the other end, faster is wasted bandwidth since the
-        // interpolation hides it anyway. Each packet is only 49 bytes so even a
-        // full 16 player lobby is peanuts, but note every player sends to every
-        // other player (full mesh, no server), so traffic grows with the square
-        // of the player count.
+        // 20/sec is plenty, the lerp on the receiving side smooths the rest.
+        // careful raising it - everyone sends to everyone, so it's n^2.
         private const float SendRate = 0.05f; // 20 times/sec
         private float _sendTimer;
 
@@ -179,10 +171,7 @@ namespace MHZombieMultiplayer
 
         private void OnP2PSessionRequest(P2PSessionRequest_t cb)
         {
-            // steam won't let packets through until both sides accept the
-            // session, so the first packet from a new player lands here.
-            // Accept anyone in our lobby - and ONLY the lobby, otherwise
-            // random people could send us junk packets
+            // first packet from someone new lands here. only accept lobby members.
             int count = SteamMatchmaking.GetNumLobbyMembers(LobbyId);
             for (int i = 0; i < count; i++)
             {
@@ -270,12 +259,8 @@ namespace MHZombieMultiplayer
 
         // ─── Packet receiving ─────────────────────────────────────────────────
 
-        // drain everything steam has queued up for us this frame. the first
-        // byte of every packet is its type, so we peek that and hand the rest
-        // to the right deserializer. anything we don't recognize just gets
-        // dropped on the floor, which conveniently means old versions of the
-        // mod won't crash when a newer version sends them packet types they
-        // don't know about.
+        // first byte = packet type. unknown types just get dropped, which
+        // keeps old versions from choking on packets they don't know.
         private void ReceivePackets()
         {
             uint msgSize;

@@ -8,10 +8,8 @@ namespace MHZombieMultiplayer
     /// Simple IMGUI overlay: lobby panel + chat.
     /// Toggle with F8. Host with F9. Leave with F10.
     /// </summary>
-    // All the UI is old-school Unity IMGUI (OnGUI + GUILayout). Yes it looks
-    // a bit 2012, but it needs zero assets, zero canvas setup, and it can't
-    // conflict with whatever UI system the game uses. For a mod overlay
-    // that's exactly the right trade.
+    // old-school IMGUI. ugly but zero setup, and it can't clash with
+    // whatever UI system the game uses.
     public class LobbyUI : MonoBehaviour
     {
         public static LobbyUI Instance { get; private set; }

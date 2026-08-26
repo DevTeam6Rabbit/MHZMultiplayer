@@ -6,11 +6,8 @@ namespace MHZombieMultiplayer
     /// Finds the local player's helicopter in the scene using the game's own tag/name conventions.
     /// Falls back through several strategies.
     /// </summary>
-    // Finding "the player's helicopter" is weirdly annoying because we can't
-    // reference the game's classes at compile time (they live in the game's
-    // own dll). So this searches by type NAME at runtime, with a couple of
-    // dumber fallbacks. Cached because FindObjectsOfType is slow and this
-    // gets called a lot.
+    // can't reference game types at compile time, so hunt by type name at
+    // runtime. cached - FindObjectsOfType is slow and this gets called a lot.
     public static class HeliLocator
     {
         private static GameObject _cachedHeli;
