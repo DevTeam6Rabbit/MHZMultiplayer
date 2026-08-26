@@ -57,6 +57,17 @@ namespace MHZombieMultiplayer
             }
 
             Log.LogInfo("MHZ Multiplayer loaded! Press F8 to open lobby.");
+
+            // Install the time trial scoreboard hook independently of the
+            // Harmony patches above, and refresh state on every scene load.
+            UnityEngine.SceneManagement.SceneManager.sceneLoaded += (scene, mode) =>
+            {
+                HeliLocator.Invalidate();
+                try { TimeTrialHook.Install(); }
+                catch (System.Exception ex) { Log.LogError($"TimeTrialHook install failed: {ex}"); }
+            };
+            try { TimeTrialHook.Install(); }
+            catch (System.Exception ex) { Log.LogError($"TimeTrialHook install failed: {ex}"); }
         }
 
         private void OnDestroy()

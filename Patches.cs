@@ -17,9 +17,8 @@ namespace MHZombieMultiplayer
             static System.Reflection.MethodBase TargetMethod()
             {
                 // Find RW_Game_Manager.Start at runtime since we can't reference it directly
-                foreach (var asm in System.AppDomain.CurrentDomain.GetAssemblies())
                 {
-                    var type = asm.GetType("RW_Game_Manager");
+                    var type = TimeTrialHook.FindGameType("Raulworks.RW_Game_Manager", "RW_Game_Manager");
                     if (type != null)
                     {
                         var method = type.GetMethod("Start",
@@ -47,6 +46,9 @@ namespace MHZombieMultiplayer
                     MultiplayerPlugin.Log.LogInfo("Lobby UI spawned.");
                 }
 
+                // Install the time trial finish hook (safe to call repeatedly)
+                TimeTrialHook.Install();
+
                 MultiplayerPlugin.Log.LogInfo("Game scene loaded — multiplayer ready.");
             }
         }
@@ -57,9 +59,8 @@ namespace MHZombieMultiplayer
         {
             static System.Reflection.MethodBase TargetMethod()
             {
-                foreach (var asm in System.AppDomain.CurrentDomain.GetAssemblies())
                 {
-                    var type = asm.GetType("RW_Player_Manager");
+                    var type = TimeTrialHook.FindGameType("Raulworks.RW_Player_Manager", "RW_Player_Manager");
                     if (type != null)
                     {
                         var method = type.GetMethod("Awake",

@@ -14,6 +14,7 @@ namespace MHZombieMultiplayer
 
         private bool _showPanel = false;
         private bool _showChat  = false;
+        private bool _showScoreboard = false;
 
         // Lobby input
         private string _joinLobbyIdInput = "";
@@ -26,6 +27,7 @@ namespace MHZombieMultiplayer
         // Panel rect
         private Rect _panelRect = new Rect(20, 20, 360, 480);
         private Rect _chatRect  = new Rect(20, 520, 360, 200);
+        private Rect _scoreRect = new Rect(-1, -1, 280, 340); // positioned on first draw
 
         private void Awake()
         {
@@ -57,7 +59,50 @@ namespace MHZombieMultiplayer
 
             if (_showChat)
                 _chatRect = GUILayout.Window(9002, _chatRect, DrawChatPanel, "Chat");
+
+            if (_showScoreboard)
+            {
+                if (_scoreRect.x < 0) // dock to the right edge on first draw
+                    _scoreRect = new Rect(Screen.width - _scoreRect.width - 20, 20,
+                                          _scoreRect.width, _scoreRect.height);
+                _scoreRect = GUILayout.Window(9003, _scoreRect, DrawScoreboardPanel, "Time Trial Scoreboard");
+            }
         }
+
+        private void DrawScoreboardPanel(int id)
+        {
+            var entries = ScoreboardManager.Entries;
+            if (entries.Count == 0)
+            {
+                GUILayout.Label("No finishes yet.");
+                GUILayout.Label("Complete a time trial run to post a time!");
+            }
+            else
+            {
+                for (int i = 0; i < entries.Count; i++)
+                {
+                    GUILayout.BeginHorizontal();
+                    GUILayout.Label($"{i + 1}.", GUILayout.Width(24));
+                    GUILayout.Label(entries[i].Name);
+                    GUILayout.FlexibleSpace();
+                    GUILayout.Label(ScoreboardManager.FormatTime(entries[i].TimeSeconds));
+                    GUILayout.EndHorizontal();
+                }
+            }
+
+            GUILayout.Space(6);
+            GUILayout.BeginHorizontal();
+            if (GUILayout.Button("Clear"))
+                ScoreboardManager.Clear();
+            if (GUILayout.Button("Hide"))
+                _showScoreboard = false;
+            GUILayout.EndHorizontal();
+
+            GUI.DragWindow();
+        }
+
+        /// <summary>Pops the scoreboard open (called when a new time is posted).</summary>
+        public void ShowScoreboard() => _showScoreboard = true;
 
         private void DrawLobbyPanel(int id)
         {
@@ -119,6 +164,9 @@ namespace MHZombieMultiplayer
                 GUILayout.Space(8);
                 if (GUILayout.Button("Toggle Chat"))
                     _showChat = !_showChat;
+
+                if (GUILayout.Button("Toggle Scoreboard"))
+                    _showScoreboard = !_showScoreboard;
 
                 if (GUILayout.Button("Leave Lobby (F10)"))
                 {

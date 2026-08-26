@@ -229,6 +229,28 @@ namespace MHZombieMultiplayer
             }
         }
 
+        public void SendRaceFinish(float timeSeconds)
+        {
+            if (!IsConnected) return;
+
+            RaceFinishPacket packet = new RaceFinishPacket
+            {
+                PacketType  = PacketType.RaceFinish,
+                SteamId     = SteamUser.GetSteamID().m_SteamID,
+                TimeSeconds = timeSeconds
+            };
+
+            byte[] data = PacketSerializer.Serialize(packet);
+            int count = SteamMatchmaking.GetNumLobbyMembers(LobbyId);
+            for (int i = 0; i < count; i++)
+            {
+                CSteamID member = SteamMatchmaking.GetLobbyMemberByIndex(LobbyId, i);
+                if (member != SteamUser.GetSteamID())
+                    SteamNetworking.SendP2PPacket(member, data, (uint)data.Length,
+                        EP2PSend.k_EP2PSendReliable, Channel);
+            }
+        }
+
         // ─── Packet receiving ─────────────────────────────────────────────────
 
         private void ReceivePackets()
@@ -252,6 +274,9 @@ namespace MHZombieMultiplayer
                     case PacketType.Chat:
                         HandleChat(PacketSerializer.DeserializeChat(data));
                         break;
+                    case PacketType.RaceFinish:
+                        HandleRaceFinish(PacketSerializer.DeserializeRaceFinish(data));
+                        break;
                 }
             }
         }
@@ -267,6 +292,12 @@ namespace MHZombieMultiplayer
             CSteamID sender = new CSteamID(packet.SteamId);
             string name = SteamFriends.GetFriendPersonaName(sender);
             LobbyUI.Instance?.AddChatMessage($"{name}: {packet.Message}");
+        }
+
+        private void HandleRaceFinish(RaceFinishPacket packet)
+        {
+            string name = SteamFriends.GetFriendPersonaName(new CSteamID(packet.SteamId));
+            ScoreboardManager.ReportRemoteFinish(name, packet.TimeSeconds);
         }
 
         // ─── Remote player management ─────────────────────────────────────────

@@ -6,8 +6,9 @@ namespace MHZombieMultiplayer
 {
     public enum PacketType : byte
     {
-        HeliState = 1,
-        Chat      = 2,
+        HeliState  = 1,
+        Chat       = 2,
+        RaceFinish = 3,
     }
 
     /// <summary>Sent ~20 times/sec: helicopter position, rotation, velocity.</summary>
@@ -26,6 +27,14 @@ namespace MHZombieMultiplayer
         public PacketType PacketType;
         public ulong SteamId;
         public string Message;
+    }
+
+    /// <summary>Reliable, sent once when a player finishes a time trial run.</summary>
+    public struct RaceFinishPacket
+    {
+        public PacketType PacketType;
+        public ulong SteamId;
+        public float TimeSeconds;
     }
 
     public static class PacketSerializer
@@ -93,6 +102,34 @@ namespace MHZombieMultiplayer
                     PacketType = (PacketType)r.ReadByte(),
                     SteamId    = r.ReadUInt64(),
                     Message    = r.ReadString(),
+                };
+            }
+        }
+
+        // ── RaceFinish ─────────────────────────────────────────────────────────
+
+        public static byte[] Serialize(RaceFinishPacket p)
+        {
+            using (var ms = new MemoryStream(13))
+            using (var w = new BinaryWriter(ms))
+            {
+                w.Write((byte)p.PacketType);
+                w.Write(p.SteamId);
+                w.Write(p.TimeSeconds);
+                return ms.ToArray();
+            }
+        }
+
+        public static RaceFinishPacket DeserializeRaceFinish(byte[] data)
+        {
+            using (var ms = new MemoryStream(data))
+            using (var r = new BinaryReader(ms))
+            {
+                return new RaceFinishPacket
+                {
+                    PacketType  = (PacketType)r.ReadByte(),
+                    SteamId     = r.ReadUInt64(),
+                    TimeSeconds = r.ReadSingle(),
                 };
             }
         }
