@@ -33,9 +33,7 @@ A [BepInEx](https://github.com/BepInEx/BepInEx) plugin that adds co-op multiplay
 4. Run `install_mhz_multiplayer.bat`. When it says install complete, close the bat and launch game.
 5. F8 to open multiplayer menu. Copy code, join same map.
 
-✅ **You're done**
-
-For full manual build instructions see [`HOW_TO_INSTALL.txt`](HOW_TO_INSTALL.txt).
+**You're done**
 
 ## Disclaimer
 
