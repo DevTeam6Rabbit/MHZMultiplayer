@@ -6,8 +6,21 @@
     <RootNamespace>MHZombieMultiplayer</RootNamespace>
     <Nullable>disable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <GameDir>C:\Program Files (x86)\Steam\steamapps\common\MH-Zombie\MHZ Build 13.1</GameDir>
+    <!-- Game location, resolved in priority order:
+         1. MHZ_GAME_DIR environment variable, if set
+         2. Auto-detect: this folder was extracted inside the MH-Zombie install
+         3. Default Steam install path -->
+    <GameDir Condition="'$(MHZ_GAME_DIR)' != ''">$(MHZ_GAME_DIR)</GameDir>
+    <GameDir Condition="'$(GameDir)' == '' And Exists('$(MSBuildProjectDirectory)\..\MHZ_Data\Managed\UnityEngine.dll')">$(MSBuildProjectDirectory)\..</GameDir>
+    <GameDir Condition="'$(GameDir)' == '' And Exists('$(MSBuildProjectDirectory)\..\MHZ Build 13.1\MHZ_Data\Managed\UnityEngine.dll')">$(MSBuildProjectDirectory)\..\MHZ Build 13.1</GameDir>
+    <GameDir Condition="'$(GameDir)' == ''">C:\Program Files (x86)\Steam\steamapps\common\MH-Zombie\MHZ Build 13.1</GameDir>
   </PropertyGroup>
+
+  <!-- Fail early with a helpful message instead of 57 cryptic errors -->
+  <Target Name="CheckGameDir" BeforeTargets="ResolveAssemblyReferences">
+    <Error Condition="!Exists('$(GameDir)\MHZ_Data\Managed\UnityEngine.dll')"
+           Text="Could not find MH-Zombie game files at '$(GameDir)'. Either (a) extract this mod folder inside your MH-Zombie install directory, (b) set the MHZ_GAME_DIR environment variable to your game path, or (c) edit GameDir in MHZombieMultiplayer.csproj. Find your game path via Steam: right-click MH-Zombie, Manage, Browse local files." />
+  </Target>
 
   <!-- BepInEx from https://nuget.bepinex.dev/v3/index.json -->
   <ItemGroup>
