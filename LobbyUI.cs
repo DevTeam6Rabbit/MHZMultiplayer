@@ -46,6 +46,8 @@ namespace MHZombieMultiplayer
             if (Input.GetKeyDown(KeyCode.F9) && NetworkManager.Instance != null)
                 NetworkManager.Instance.HostLobby();
 
+            HeliVisibility.Tick();
+
             if (Input.GetKeyDown(KeyCode.F10) && NetworkManager.Instance != null)
             {
                 NetworkManager.Instance.LeaveLobby();
@@ -197,6 +199,9 @@ namespace MHZombieMultiplayer
             }
 
             GUILayout.Space(8);
+            if (GUILayout.Button(HeliVisibility.Hidden ? "Show My Heli Model" : "Hide My Heli Model"))
+                HeliVisibility.Toggle();
+
             GUILayout.Label("F8 = toggle this panel");
 
             GUI.DragWindow();
