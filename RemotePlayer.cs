@@ -1,0 +1,79 @@
+using Steamworks;
+using UnityEngine;
+
+namespace MHZombieMultiplayer
+{
+    /// <summary>
+    /// Attached to the ghost helicopter object that represents a remote player.
+    /// Smoothly interpolates their position/rotation from received network packets.
+    /// </summary>
+    public class RemotePlayer : MonoBehaviour
+    {
+        public CSteamID SteamId;
+        public string DisplayName;
+
+        // Interpolation targets
+        private Vector3 _targetPosition;
+        private Quaternion _targetRotation;
+        private Vector3 _velocity;
+
+        // How fast we interpolate toward received position (higher = snappier but jerkier)
+        private const float InterpSpeed = 15f;
+
+        // Name label above the heli
+        private TextMesh _nameLabel;
+
+        private float _lastUpdateTime;
+        private const float TimeoutSeconds = 5f; // hide heli if no updates for 5s
+
+        private void Start()
+        {
+            _targetPosition = transform.position;
+            _targetRotation = transform.rotation;
+            _lastUpdateTime = Time.time;
+
+            // Create floating name label
+            GameObject labelObj = new GameObject("NameLabel");
+            labelObj.transform.SetParent(transform);
+            labelObj.transform.localPosition = new Vector3(0, 3f, 0);
+            _nameLabel = labelObj.AddComponent<TextMesh>();
+            _nameLabel.text = DisplayName ?? "Player";
+            _nameLabel.fontSize = 24;
+            _nameLabel.alignment = TextAlignment.Center;
+            _nameLabel.anchor = TextAnchor.LowerCenter;
+            _nameLabel.color = Color.cyan;
+            labelObj.transform.localScale = Vector3.one * 0.1f;
+        }
+
+        private void Update()
+        {
+            // Smooth movement toward received state
+            transform.position = Vector3.Lerp(transform.position, _targetPosition, InterpSpeed * Time.deltaTime);
+            transform.rotation = Quaternion.Slerp(transform.rotation, _targetRotation, InterpSpeed * Time.deltaTime);
+
+            // Keep name label facing the camera
+            if (Camera.main != null)
+            {
+                _nameLabel.transform.rotation = Quaternion.LookRotation(
+                    _nameLabel.transform.position - Camera.main.transform.position);
+            }
+
+            // Hide if we haven't heard from this player in a while
+            bool active = (Time.time - _lastUpdateTime) < TimeoutSeconds;
+            if (gameObject.activeSelf != active)
+                gameObject.SetActive(active);
+        }
+
+        /// <summary>Apply a received network state to this ghost heli.</summary>
+        public void ApplyState(HeliStatePacket packet)
+        {
+            _targetPosition = packet.Position;
+            _targetRotation = packet.Rotation;
+            _velocity = packet.Velocity;
+            _lastUpdateTime = Time.time;
+
+            if (!gameObject.activeSelf)
+                gameObject.SetActive(true);
+        }
+    }
+}

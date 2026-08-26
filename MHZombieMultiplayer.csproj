@@ -1,0 +1,70 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net462</TargetFramework>
+    <AssemblyName>MHZombieMultiplayer</AssemblyName>
+    <RootNamespace>MHZombieMultiplayer</RootNamespace>
+    <Nullable>disable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <GameDir>C:\Program Files (x86)\Steam\steamapps\common\MH-Zombie\MHZ Build 13.1</GameDir>
+  </PropertyGroup>
+
+  <!-- BepInEx from https://nuget.bepinex.dev/v3/index.json -->
+  <ItemGroup>
+    <PackageReference Include="BepInEx.Analyzers"       Version="1.0.8"  PrivateAssets="all" />
+    <PackageReference Include="BepInEx.Core"            Version="5.4.21" />
+    <PackageReference Include="BepInEx.PluginInfoProps" Version="1.1.0"  />
+    <PackageReference Include="HarmonyX"                Version="2.10.1" />
+  </ItemGroup>
+
+  <!-- Unity + game DLLs - all modules explicitly referenced -->
+  <ItemGroup>
+    <Reference Include="UnityEngine">
+      <HintPath>$(GameDir)\MHZ_Data\Managed\UnityEngine.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.CoreModule">
+      <HintPath>$(GameDir)\MHZ_Data\Managed\UnityEngine.CoreModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.UI">
+      <HintPath>$(GameDir)\MHZ_Data\Managed\UnityEngine.UI.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <!-- GUI, GUILayout, GUIUtility -->
+    <Reference Include="UnityEngine.IMGUIModule">
+      <HintPath>$(GameDir)\MHZ_Data\Managed\UnityEngine.IMGUIModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <!-- Rigidbody, Physics -->
+    <Reference Include="UnityEngine.PhysicsModule">
+      <HintPath>$(GameDir)\MHZ_Data\Managed\UnityEngine.PhysicsModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <!-- TextMesh -->
+    <Reference Include="UnityEngine.TextRenderingModule">
+      <HintPath>$(GameDir)\MHZ_Data\Managed\UnityEngine.TextRenderingModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <!-- AudioListener, AudioSource -->
+    <Reference Include="UnityEngine.AudioModule">
+      <HintPath>$(GameDir)\MHZ_Data\Managed\UnityEngine.AudioModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <!-- Input -->
+    <Reference Include="UnityEngine.InputLegacyModule">
+      <HintPath>$(GameDir)\MHZ_Data\Managed\UnityEngine.InputLegacyModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Assembly-CSharp">
+      <HintPath>$(GameDir)\MHZ_Data\Managed\Assembly-CSharp.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <!-- Correct Steamworks filename -->
+    <Reference Include="com.rlabrecque.steamworks.net">
+      <HintPath>$(GameDir)\MHZ_Data\Managed\com.rlabrecque.steamworks.net.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+</Project>
