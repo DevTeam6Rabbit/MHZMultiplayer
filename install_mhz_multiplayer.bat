@@ -17,8 +17,63 @@ echo  =====================================================
 echo.
 
 :: ── Config ────────────────────────────────────────────────────────────────
-set "GAME_DIR=C:\Program Files (x86)\Steam\steamapps\common\MH-Zombie\MHZ Build 13.1"
+set "GAME_DIR="
 set "SCRIPT_DIR=%~dp0"
+
+:: ── Find the game ─────────────────────────────────────────────────────────
+:: 1. maybe this bat is already inside the game folder (recommended install)
+if exist "%SCRIPT_DIR%MHZ.exe" set "GAME_DIR=%SCRIPT_DIR%"
+if not defined GAME_DIR if exist "%SCRIPT_DIR%MHZ Build 13.1\MHZ.exe" set "GAME_DIR=%SCRIPT_DIR%MHZ Build 13.1"
+if not defined GAME_DIR if exist "%SCRIPT_DIR%..\MHZ Build 13.1\MHZ.exe" set "GAME_DIR=%SCRIPT_DIR%..\MHZ Build 13.1"
+
+:: 2. scan every drive for the usual steam spots
+if not defined GAME_DIR (
+    for %%d in (C D E F G H I J K L M N O P Q R S T U V W X Y Z) do (
+        if not defined GAME_DIR (
+            if exist "%%d:\Program Files (x86)\Steam\steamapps\common\MH-Zombie\MHZ Build 13.1\MHZ.exe" set "GAME_DIR=%%d:\Program Files (x86)\Steam\steamapps\common\MH-Zombie\MHZ Build 13.1"
+            if exist "%%d:\Program Files\Steam\steamapps\common\MH-Zombie\MHZ Build 13.1\MHZ.exe" set "GAME_DIR=%%d:\Program Files\Steam\steamapps\common\MH-Zombie\MHZ Build 13.1"
+            if exist "%%d:\SteamLibrary\steamapps\common\MH-Zombie\MHZ Build 13.1\MHZ.exe" set "GAME_DIR=%%d:\SteamLibrary\steamapps\common\MH-Zombie\MHZ Build 13.1"
+            if exist "%%d:\Steam\steamapps\common\MH-Zombie\MHZ Build 13.1\MHZ.exe" set "GAME_DIR=%%d:\Steam\steamapps\common\MH-Zombie\MHZ Build 13.1"
+        )
+    )
+)
+
+:: 3. found something? let the user confirm. found nothing? ask for the path.
+if defined GAME_DIR (
+    echo  Found the game here:
+    echo    !GAME_DIR!
+    echo.
+    set /p CONFIRM="  Use this folder? [Y/n]: "
+    if /i "!CONFIRM!"=="n" set "GAME_DIR="
+)
+
+:ask_path
+if not defined GAME_DIR (
+    echo.
+    echo  Paste the path to your MH-Zombie install and press Enter.
+    echo  ^(Steam: right-click the game ^> Manage ^> Browse local files,
+    echo   then copy the address bar. Any of these work:
+    echo   the MH-Zombie folder, the "MHZ Build 13.1" folder,
+    echo   or the full path to MHZ.exe^)
+    echo.
+    set /p USERPATH="  Path: "
+    set "USERPATH=!USERPATH:"=!"
+    if "!USERPATH!"=="" goto :ask_path
+    if /i "!USERPATH:~-7!"=="MHZ.exe" (
+        if exist "!USERPATH!" set "GAME_DIR=!USERPATH:~0,-8!"
+    ) else if exist "!USERPATH!\MHZ.exe" (
+        set "GAME_DIR=!USERPATH!"
+    ) else if exist "!USERPATH!\MHZ Build 13.1\MHZ.exe" (
+        set "GAME_DIR=!USERPATH!\MHZ Build 13.1"
+    )
+    if not defined GAME_DIR (
+        echo.
+        echo  [!] Could not find MHZ.exe there. Check the path and try again.
+        goto :ask_path
+    )
+    echo  [OK] Game found at: !GAME_DIR!
+)
+echo.
 set "BEPINEX_URL=https://github.com/BepInEx/BepInEx/releases/download/v5.4.23.2/BepInEx_win_x64_5.4.23.2.zip"
 set "BEPINEX_ZIP=%TEMP%\BepInEx.zip"
 set "DOTNET_DIR=%USERPROFILE%\.dotnet-mhz"
@@ -75,10 +130,7 @@ if not exist "!MHZ_EXE!" (
     echo  Looked for : !MHZ_EXE!
     echo  GAME_DIR is: !GAME_DIR!
     echo.
-    echo  Contents of parent folder:
-    dir "C:\Program Files (x86)\Steam\steamapps\common\MH-Zombie" /b 2>&1
-    echo.
-    echo  Fix: Edit GAME_DIR in this bat to match the folder containing MHZ.exe
+    echo  Fix: Re-run this installer and enter the correct game path when asked.
     goto :fail
 )
 echo  [OK] MHZ.exe found.
