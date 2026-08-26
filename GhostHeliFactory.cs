@@ -9,11 +9,8 @@ namespace MHZombieMultiplayer
     /// mesh-only copy of the heli's visuals: no game scripts, no colliders,
     /// nothing that can break or interfere - just the meshes and materials.
     /// </summary>
-    // Note we deliberately do NOT clone the heli object itself - a clone
-    // would drag every game script along with it and those would need
-    // stripping one by one. Instead we copy only the meshes and materials
-    // into a fresh empty object: nothing to strip, nothing to break, and as
-    // far as the game logic is concerned the ghost doesn't exist.
+    // mesh-only copy on purpose. cloning the real heli drags all its
+    // scripts along and they fight you - bare meshes can't break anything.
     public static class GhostHeliFactory
     {
         public static GameObject Create(CSteamID ownerId)
@@ -64,11 +61,8 @@ namespace MHZombieMultiplayer
         /// meshes may live elsewhere in the hierarchy. Walk upward until we find
         /// a level that actually has renderers beneath it.
         /// </summary>
-        // HeliLocator hands us whatever object has the heli controller script
-        // on it, but that's not where the meshes live - in this game the
-        // controller sits on 'Main_Engine' while the actual model hangs off a
-        // parent called 'AHZ'. So walk up the hierarchy until we find a level
-        // that actually has renderers somewhere under it.
+        // the controller and the actual model are different objects here
+        // (Main_Engine vs AHZ), so walk up until renderers show up.
         private static Transform FindVisualRoot(GameObject located)
         {
             if (located == null) return null;
