@@ -159,8 +159,25 @@ namespace MHZombieMultiplayer
                 for (int i = 0; i < count; i++)
                 {
                     CSteamID member = SteamMatchmaking.GetLobbyMemberByIndex(nm.LobbyId, i);
-                    string self = member == SteamUser.GetSteamID() ? " (You)" : "";
-                    GUILayout.Label($"  • {SteamFriends.GetFriendPersonaName(member)}{self}");
+                    bool isSelf = member == SteamUser.GetSteamID();
+                    GUILayout.BeginHorizontal();
+                    GUILayout.Label($"  • {SteamFriends.GetFriendPersonaName(member)}{(isSelf ? " (You)" : "")}");
+                    GUILayout.FlexibleSpace();
+                    // can only spectate people we actually have a ghost for
+                    if (!isSelf && nm.RemotePlayers.ContainsKey(member) &&
+                        GUILayout.Button("Spectate", GUILayout.Width(70)))
+                        SpectateManager.Start(member);
+                    GUILayout.EndHorizontal();
+                }
+
+                if (SpectateManager.IsSpectating)
+                {
+                    GUILayout.Space(4);
+                    GUILayout.BeginHorizontal();
+                    GUILayout.Label($"Spectating: {SpectateManager.TargetName}");
+                    if (GUILayout.Button("Stop", GUILayout.Width(50)))
+                        SpectateManager.Stop();
+                    GUILayout.EndHorizontal();
                 }
 
                 GUILayout.Space(8);
@@ -172,6 +189,7 @@ namespace MHZombieMultiplayer
 
                 if (GUILayout.Button("Leave Lobby (F10)"))
                 {
+                    SpectateManager.Stop();
                     nm.LeaveLobby();
                     _showChat = false;
                     _chatMessages.Clear();
