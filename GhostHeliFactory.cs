@@ -4,108 +4,127 @@ using UnityEngine;
 namespace MHZombieMultiplayer
 {
     /// <summary>
-    /// Creates a "ghost" helicopter object for a remote player.
-    /// It's a visual copy of the local helicopter with all scripts/weapons stripped out.
+    /// Creates the visual representation of a remote player's helicopter.
+    /// Instead of cloning the local heli (scripts and all), this builds a clean
+    /// mesh-only copy of the heli's visuals: no game scripts, no colliders,
+    /// nothing that can break or interfere - just the meshes and materials.
     /// </summary>
     public static class GhostHeliFactory
     {
         public static GameObject Create(CSteamID ownerId)
         {
-            // Try to clone the local helicopter as a base
-            GameObject localHeli = HeliLocator.GetLocalHeli();
+            GameObject ghost = new GameObject($"RemoteHeli_{ownerId}");
 
-            GameObject ghost;
-            if (localHeli != null)
+            GameObject located = HeliLocator.GetLocalHeli();
+            Transform sourceRoot = FindVisualRoot(located);
+
+            int copied = 0;
+            if (sourceRoot != null)
+                copied = CopyVisuals(sourceRoot, ghost.transform);
+
+            MultiplayerPlugin.Log.LogInfo(
+                $"[GhostHeliFactory] located={(located ? located.name : "null")} " +
+                $"visualRoot={(sourceRoot ? sourceRoot.name : "null")} renderersCopied={copied}");
+
+            if (copied == 0)
             {
-                ghost = Object.Instantiate(localHeli, localHeli.transform.position + Vector3.right * 20f,
-                    localHeli.transform.rotation);
-                ghost.name = $"GhostHeli_{ownerId}";
-
-                // Remove all gameplay scripts so it doesn't actually do anything
-                StripGameplayScripts(ghost);
-            }
-            else
-            {
-                // Fallback: simple coloured cube placeholder
-                ghost = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                ghost.name = $"GhostHeli_{ownerId}";
-                ghost.transform.localScale = new Vector3(3f, 1f, 4f);
-                ghost.GetComponent<Renderer>().material.color = Color.cyan;
-                Object.Destroy(ghost.GetComponent<Collider>());
-            }
-
-            // Tint it a different colour so it's visually distinct from yours
-            TintObject(ghost, new Color(0.3f, 0.8f, 1f, 0.85f));
-
-            // Make sure it can't interfere with game physics
-            Rigidbody rb = ghost.GetComponent<Rigidbody>();
-            if (rb != null)
-            {
-                rb.isKinematic = true;
-                rb.useGravity = false;
+                // Fallback: simple coloured box so the remote player is at least visible
+                MultiplayerPlugin.Log.LogWarning("[GhostHeliFactory] No renderers found to copy - using placeholder box");
+                GameObject box = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                Object.Destroy(box.GetComponent<Collider>());
+                box.transform.SetParent(ghost.transform, false);
+                box.transform.localScale = new Vector3(3f, 1.5f, 4f);
+                Renderer br = box.GetComponent<Renderer>();
+                if (br != null && br.material.HasProperty("_Color"))
+                    br.material.color = Color.cyan;
             }
 
             Object.DontDestroyOnLoad(ghost);
             return ghost;
         }
 
-        private static void StripGameplayScripts(GameObject go)
+        /// <summary>
+        /// The located object carries the heli's control script, but the visible
+        /// meshes may live elsewhere in the hierarchy. Walk upward until we find
+        /// a level that actually has renderers beneath it.
+        /// </summary>
+        private static Transform FindVisualRoot(GameObject located)
         {
-            // Types to remove — everything that could affect game state
-            string[] stripTypes =
-            {
-                "RW_Heli_Controller",
-                "RW_Heli_Engine",
-                "RW_HeliWeapon_Controller",
-                "RW_Heli_Rotor_Controller",
-                "RW_New_Input_Controller",
-                "RW_KeyboardHeli_Input",
-                "RW_XboxHeli_Input",
-                "RW_BaseHeli_Input",
-                "RW_Gatling_Gun",
-                "RW_Rocket_Launcher",
-                "RW_Base_Weapon",
-                "RW_RapidFire_Weapon",
-                "RW_MineLayer",
-                "RW_Camera_Manager",
-                "RW_Player_Manager",
-                "HeliSimPack.HelicopterSimulation",
-            };
+            if (located == null) return null;
 
-            foreach (string typeName in stripTypes)
+            Transform t = located.transform;
+            while (t != null)
             {
-                foreach (Component comp in go.GetComponentsInChildren<Component>(true))
-                {
-                    if (comp == null) continue;
-                    if (comp.GetType().Name == typeName || comp.GetType().FullName == typeName)
-                        Object.Destroy(comp);
-                }
+                if (t.GetComponentsInChildren<MeshRenderer>(true).Length > 0 ||
+                    t.GetComponentsInChildren<SkinnedMeshRenderer>(true).Length > 0)
+                    return t;
+                t = t.parent;
             }
-
-            // Remove all colliders so ghost can't interact with game world
-            foreach (Collider col in go.GetComponentsInChildren<Collider>(true))
-                Object.Destroy(col);
-
-            // Remove any audio listeners
-            foreach (AudioListener al in go.GetComponentsInChildren<AudioListener>(true))
-                Object.Destroy(al);
+            return null;
         }
 
-        private static void TintObject(GameObject go, Color tint)
+        /// <summary>
+        /// Copies every mesh under sourceRoot into ghostRoot as bare
+        /// MeshFilter+MeshRenderer children, preserving relative pose and
+        /// original materials. Returns the number of renderers copied.
+        /// </summary>
+        private static int CopyVisuals(Transform sourceRoot, Transform ghostRoot)
         {
-            foreach (Renderer r in go.GetComponentsInChildren<Renderer>(true))
+            int count = 0;
+
+            foreach (MeshRenderer src in sourceRoot.GetComponentsInChildren<MeshRenderer>(true))
             {
-                if (r == null) continue;
-                // Clone materials so we don't tint the original
-                Material[] mats = r.materials;
-                for (int i = 0; i < mats.Length; i++)
-                {
-                    mats[i] = new Material(mats[i]);
-                    if (mats[i].HasProperty("_Color"))
-                        mats[i].color = tint;
-                }
-                r.materials = mats;
+                MeshFilter mf = src.GetComponent<MeshFilter>();
+                if (mf == null || mf.sharedMesh == null) continue;
+                MakeMeshChild(sourceRoot, ghostRoot, src.transform, mf.sharedMesh, src.sharedMaterials);
+                count++;
             }
+
+            // Skinned meshes are copied as static meshes in bind pose - fine for a vehicle
+            foreach (SkinnedMeshRenderer src in sourceRoot.GetComponentsInChildren<SkinnedMeshRenderer>(true))
+            {
+                if (src.sharedMesh == null) continue;
+                MakeMeshChild(sourceRoot, ghostRoot, src.transform, src.sharedMesh, src.sharedMaterials);
+                count++;
+            }
+
+            // Spin anything that looks like a rotor so the heli doesn't look frozen
+            foreach (Transform child in ghostRoot.GetComponentsInChildren<Transform>(true))
+            {
+                string n = child.name.ToLowerInvariant();
+                if (n.Contains("rotor") || n.Contains("blade") || n.Contains("prop"))
+                    child.gameObject.AddComponent<RotorSpinner>();
+            }
+
+            return count;
+        }
+
+        private static void MakeMeshChild(Transform sourceRoot, Transform ghostRoot,
+            Transform src, Mesh mesh, Material[] materials)
+        {
+            GameObject child = new GameObject(src.name);
+            child.transform.SetParent(ghostRoot, false);
+
+            // Reproduce the source part's pose relative to the heli root
+            child.transform.localPosition = sourceRoot.InverseTransformPoint(src.position);
+            child.transform.localRotation = Quaternion.Inverse(sourceRoot.rotation) * src.rotation;
+            child.transform.localScale = src.lossyScale;
+
+            child.AddComponent<MeshFilter>().sharedMesh = mesh;
+            MeshRenderer mr = child.AddComponent<MeshRenderer>();
+            mr.sharedMaterials = materials;
+            mr.enabled = true;
+        }
+    }
+
+    /// <summary>Spins rotor/blade meshes on the remote heli copy for visual effect.</summary>
+    public class RotorSpinner : MonoBehaviour
+    {
+        private const float DegreesPerSecond = 1800f;
+
+        private void Update()
+        {
+            transform.Rotate(0f, DegreesPerSecond * Time.deltaTime, 0f, Space.Self);
         }
     }
 }
