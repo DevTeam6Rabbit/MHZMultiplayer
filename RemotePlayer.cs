@@ -26,6 +26,10 @@ namespace MHZombieMultiplayer
         private float _lastUpdateTime;
         private const float TimeoutSeconds = 5f; // hide heli if no updates for 5s
 
+        // Retry building the real heli visuals until a local heli exists to copy
+        private bool _visualsBuilt;
+        private float _nextVisualRetry;
+
         private void Start()
         {
             _targetPosition = transform.position;
@@ -43,10 +47,26 @@ namespace MHZombieMultiplayer
             _nameLabel.anchor = TextAnchor.LowerCenter;
             _nameLabel.color = Color.cyan;
             labelObj.transform.localScale = Vector3.one * 0.1f;
+
+            // If the factory managed a real copy at spawn, there's no placeholder
+            _visualsBuilt = transform.Find("PlaceholderBox") == null;
         }
 
         private void Update()
         {
+            // Swap the placeholder box for the real heli model as soon as possible
+            if (!_visualsBuilt && Time.time >= _nextVisualRetry)
+            {
+                _nextVisualRetry = Time.time + 2f;
+                if (GhostHeliFactory.TryBuildVisuals(transform) > 0)
+                {
+                    _visualsBuilt = true;
+                    Transform box = transform.Find("PlaceholderBox");
+                    if (box != null) Destroy(box.gameObject);
+                    MultiplayerPlugin.Log.LogInfo($"[RemotePlayer] Upgraded {DisplayName}'s placeholder to the real heli model");
+                }
+            }
+
             // Smooth movement toward received state
             transform.position = Vector3.Lerp(transform.position, _targetPosition, InterpSpeed * Time.deltaTime);
             transform.rotation = Quaternion.Slerp(transform.rotation, _targetRotation, InterpSpeed * Time.deltaTime);

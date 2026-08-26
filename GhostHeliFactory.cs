@@ -15,22 +15,16 @@ namespace MHZombieMultiplayer
         {
             GameObject ghost = new GameObject($"RemoteHeli_{ownerId}");
 
-            GameObject located = HeliLocator.GetLocalHeli();
-            Transform sourceRoot = FindVisualRoot(located);
-
-            int copied = 0;
-            if (sourceRoot != null)
-                copied = CopyVisuals(sourceRoot, ghost.transform);
-
-            MultiplayerPlugin.Log.LogInfo(
-                $"[GhostHeliFactory] located={(located ? located.name : "null")} " +
-                $"visualRoot={(sourceRoot ? sourceRoot.name : "null")} renderersCopied={copied}");
+            int copied = TryBuildVisuals(ghost.transform);
 
             if (copied == 0)
             {
-                // Fallback: simple coloured box so the remote player is at least visible
-                MultiplayerPlugin.Log.LogWarning("[GhostHeliFactory] No renderers found to copy - using placeholder box");
+                // Placeholder box so the remote player is visible right away.
+                // RemotePlayer keeps retrying and swaps this for the real model
+                // as soon as a local heli exists to copy from.
+                MultiplayerPlugin.Log.LogInfo("[GhostHeliFactory] No heli to copy yet - placeholder box until one appears");
                 GameObject box = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                box.name = "PlaceholderBox";
                 Object.Destroy(box.GetComponent<Collider>());
                 box.transform.SetParent(ghost.transform, false);
                 box.transform.localScale = new Vector3(3f, 1.5f, 4f);
@@ -41,6 +35,23 @@ namespace MHZombieMultiplayer
 
             Object.DontDestroyOnLoad(ghost);
             return ghost;
+        }
+
+        /// <summary>
+        /// Attempts to copy the local heli's meshes into ghostRoot.
+        /// Returns the number of renderers copied (0 if no heli exists yet).
+        /// Safe to call repeatedly until it succeeds.
+        /// </summary>
+        public static int TryBuildVisuals(Transform ghostRoot)
+        {
+            GameObject located = HeliLocator.GetLocalHeli();
+            Transform sourceRoot = FindVisualRoot(located);
+            if (sourceRoot == null) return 0;
+
+            int copied = CopyVisuals(sourceRoot, ghostRoot);
+            MultiplayerPlugin.Log.LogInfo(
+                $"[GhostHeliFactory] located={located.name} visualRoot={sourceRoot.name} renderersCopied={copied}");
+            return copied;
         }
 
         /// <summary>
