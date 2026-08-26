@@ -3,14 +3,9 @@ using UnityEngine;
 
 namespace MHZombieMultiplayer
 {
-    /// <summary>
-    /// Creates the visual representation of a remote player's helicopter.
-    /// Instead of cloning the local heli (scripts and all), this builds a clean
-    /// mesh-only copy of the heli's visuals: no game scripts, no colliders,
-    /// nothing that can break or interfere - just the meshes and materials.
-    /// </summary>
-    // mesh-only copy on purpose. cloning the real heli drags all its
-    // scripts along and they fight you - bare meshes can't break anything.
+    // builds the visual stand-in for a remote player's heli. mesh-only copy
+    // on purpose - cloning the real heli drags all its scripts along and
+    // they fight you, bare meshes can't break anything.
     public static class GhostHeliFactory
     {
         public static GameObject Create(CSteamID ownerId)
@@ -56,11 +51,6 @@ namespace MHZombieMultiplayer
             return copied;
         }
 
-        /// <summary>
-        /// The located object carries the heli's control script, but the visible
-        /// meshes may live elsewhere in the hierarchy. Walk upward until we find
-        /// a level that actually has renderers beneath it.
-        /// </summary>
         // the controller and the actual model are different objects here
         // (Main_Engine vs AHZ), so walk up until renderers show up.
         private static Transform FindVisualRoot(GameObject located)
