@@ -9,14 +9,11 @@ namespace MHZombieMultiplayer
     /// mesh-only copy of the heli's visuals: no game scripts, no colliders,
     /// nothing that can break or interfere - just the meshes and materials.
     /// </summary>
-    // History lesson so nobody repeats my mistakes: v1 of this just did
-    // Instantiate() on the whole local heli and then tried to delete all the
-    // game scripts off the clone. Terrible idea - the model didn't even render
-    // because the controller script lives on a child object with no meshes
-    // under it, so we were cloning an invisible object and fighting its
-    // leftover scripts for nothing. Copying ONLY the meshes into a fresh
-    // object turned out to be way more reliable: nothing to strip, nothing to
-    // break, and the game can't tell it exists.
+    // Note we deliberately do NOT clone the heli object itself - a clone
+    // would drag every game script along with it and those would need
+    // stripping one by one. Instead we copy only the meshes and materials
+    // into a fresh empty object: nothing to strip, nothing to break, and as
+    // far as the game logic is concerned the ghost doesn't exist.
     public static class GhostHeliFactory
     {
         public static GameObject Create(CSteamID ownerId)
@@ -68,9 +65,9 @@ namespace MHZombieMultiplayer
         /// a level that actually has renderers beneath it.
         /// </summary>
         // HeliLocator hands us whatever object has the heli controller script
-        // on it, but that's not where the meshes are (found out the hard way -
-        // the controller sits on 'Main_Engine', the actual model is on a parent
-        // called 'AHZ'). So we just walk up the hierarchy until we find a level
+        // on it, but that's not where the meshes live - in this game the
+        // controller sits on 'Main_Engine' while the actual model hangs off a
+        // parent called 'AHZ'. So walk up the hierarchy until we find a level
         // that actually has renderers somewhere under it.
         private static Transform FindVisualRoot(GameObject located)
         {

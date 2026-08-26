@@ -75,12 +75,11 @@ namespace MHZombieMultiplayer
     /// EndRound() copies it into "endTime" when the run completes - so we
     /// postfix EndRound and read endTime for the final result.
     /// </summary>
-    // How we know a race finished: we disassembled the game and found that
-    // RW_Race.EndRound() copies the live timer field ("time") into "endTime"
-    // when a run completes. So we harmony-postfix EndRound and read endTime.
-    // Don't be tempted to grab just any field with "time" in the name - the
-    // same class has maxTime (the par time) which is NOT your result. Ask me
-    // how I know.
+    // How we know a race finished: the game's RW_Race.EndRound() copies the
+    // live timer field ("time") into "endTime" when a run completes, so we
+    // harmony-postfix EndRound and read endTime. Careful if you touch this:
+    // the same class also has maxTime (the par time), which is NOT the
+    // player's result.
     public static class TimeTrialHook
     {
         private static bool _installed;
@@ -89,10 +88,10 @@ namespace MHZombieMultiplayer
         private static FieldInfo _timeField;
 
         /// <summary>Finds a game type by full name, falling back to a scan by simple name.</summary>
-        // Every game class lives in the "Raulworks" namespace, which cost us
-        // an evening once: asm.GetType("RW_Race") returns null, it has to be
-        // "Raulworks.RW_Race". The fallback scan by simple name is there so a
-        // game update moving things around doesn't silently kill the mod.
+        // Every game class lives in the "Raulworks" namespace, so lookups
+        // need the full name: asm.GetType("RW_Race") returns null, it has to
+        // be "Raulworks.RW_Race". The fallback scan by simple name is there so
+        // a game update moving things around doesn't silently kill the mod.
         public static Type FindGameType(string fullName, string simpleName)
         {
             foreach (Assembly asm in AppDomain.CurrentDomain.GetAssemblies())

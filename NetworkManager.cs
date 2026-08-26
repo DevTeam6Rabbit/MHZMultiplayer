@@ -37,12 +37,12 @@ namespace MHZombieMultiplayer
             = new Dictionary<CSteamID, RemotePlayer>();
 
         // How often (seconds) we broadcast our helicopter state.
-        // 20/sec felt like the sweet spot - 10 was visibly choppy even with the
-        // lerp smoothing on the other end, and 60 is just wasted bandwidth since
-        // the interpolation hides anything faster. Each packet is only 49 bytes
-        // so even a full 16 player lobby is peanuts, but every player sends to
-        // every other player (full mesh, no server), so it grows with the square
-        // of the player count. Worth remembering if we ever go bigger.
+        // 20/sec is the sweet spot - slower gets visibly choppy even with the
+        // lerp smoothing on the other end, faster is wasted bandwidth since the
+        // interpolation hides it anyway. Each packet is only 49 bytes so even a
+        // full 16 player lobby is peanuts, but note every player sends to every
+        // other player (full mesh, no server), so traffic grows with the square
+        // of the player count.
         private const float SendRate = 0.05f; // 20 times/sec
         private float _sendTimer;
 
@@ -181,8 +181,8 @@ namespace MHZombieMultiplayer
         {
             // steam won't let packets through until both sides accept the
             // session, so the first packet from a new player lands here.
-            // Accept P2P from anyone in our lobby - and ONLY the lobby,
-            // otherwise random people could send us junk packets
+            // Accept anyone in our lobby - and ONLY the lobby, otherwise
+            // random people could send us junk packets
             int count = SteamMatchmaking.GetNumLobbyMembers(LobbyId);
             for (int i = 0; i < count; i++)
             {

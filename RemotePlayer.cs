@@ -21,7 +21,7 @@ namespace MHZombieMultiplayer
         // positions 20x a second, so between packets we're always chasing a
         // slightly stale target. Higher = snappier but jerkier when packets
         // arrive late; lower = smooth but the heli visibly lags behind where
-        // the player actually is. 15 looked right by eye.
+        // the player actually is. 15 is a good middle ground.
         private const float InterpSpeed = 15f;
 
         // Name label above the heli
@@ -59,11 +59,10 @@ namespace MHZombieMultiplayer
         private void Update()
         {
             // Swap the placeholder box for the real heli model as soon as
-            // possible. The catch: we can only build the model by copying our
-            // OWN heli's meshes, and if this player joined while we were still
-            // in the menu, we don't have a heli yet. So we retry every couple
-            // of seconds until one exists. This is why people used to see
-            // permanent cubes - there was no retry, just one attempt at spawn.
+            // possible. The catch: the model is built by copying our OWN
+            // heli's meshes, and if this player joined while we were still in
+            // the menu there's no heli to copy yet - hence the retry every
+            // couple of seconds until one exists.
             if (!_visualsBuilt && Time.time >= _nextVisualRetry)
             {
                 _nextVisualRetry = Time.time + 2f;
