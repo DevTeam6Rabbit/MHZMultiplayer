@@ -43,6 +43,18 @@ namespace MHZombieMultiplayer
             _nameLabel.anchor = TextAnchor.LowerCenter;
             _nameLabel.color = Color.cyan;
             labelObj.transform.localScale = Vector3.one * 0.1f;
+
+            // Visible 3D marker box under the name, so the remote player can
+            // always be seen even if the cloned heli model fails to render
+            GameObject marker = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            marker.name = "PlayerMarker";
+            Object.Destroy(marker.GetComponent<Collider>()); // must not affect physics
+            marker.transform.SetParent(transform, false);
+            marker.transform.localPosition = new Vector3(0, 1.2f, 0);
+            marker.transform.localScale = new Vector3(3f, 3f, 3f);
+            Renderer markerRenderer = marker.GetComponent<Renderer>();
+            if (markerRenderer != null && markerRenderer.material.HasProperty("_Color"))
+                markerRenderer.material.color = Color.cyan;
         }
 
         private void Update()
