@@ -13,6 +13,9 @@
     <GameDir Condition="'$(MHZ_GAME_DIR)' != ''">$(MHZ_GAME_DIR)</GameDir>
     <GameDir Condition="'$(GameDir)' == '' And Exists('$(MSBuildProjectDirectory)\..\MHZ_Data\Managed\UnityEngine.dll')">$(MSBuildProjectDirectory)\..</GameDir>
     <GameDir Condition="'$(GameDir)' == '' And Exists('$(MSBuildProjectDirectory)\..\MHZ Build 13.1\MHZ_Data\Managed\UnityEngine.dll')">$(MSBuildProjectDirectory)\..\MHZ Build 13.1</GameDir>
+    <!-- windows "extract all" tends to double-nest the zip folder, so check two levels up too -->
+    <GameDir Condition="'$(GameDir)' == '' And Exists('$(MSBuildProjectDirectory)\..\..\MHZ_Data\Managed\UnityEngine.dll')">$(MSBuildProjectDirectory)\..\..</GameDir>
+    <GameDir Condition="'$(GameDir)' == '' And Exists('$(MSBuildProjectDirectory)\..\..\MHZ Build 13.1\MHZ_Data\Managed\UnityEngine.dll')">$(MSBuildProjectDirectory)\..\..\MHZ Build 13.1</GameDir>
     <GameDir Condition="'$(GameDir)' == ''">C:\Program Files (x86)\Steam\steamapps\common\MH-Zombie\MHZ Build 13.1</GameDir>
   </PropertyGroup>
 

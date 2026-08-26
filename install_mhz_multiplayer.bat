@@ -225,15 +225,9 @@ if not exist "!CSPROJ!" (
 )
 echo  [OK] .csproj found.
 
-echo  Patching GameDir in .csproj...
-powershell -ExecutionPolicy Bypass -Command ^
-  "$f='!CSPROJ!'; $c=(Get-Content $f -Raw) -replace '<GameDir>[^<]*</GameDir>','<GameDir>!GAME_DIR!</GameDir>'; Set-Content $f $c; Write-Host 'Patch done'"
-echo  Patch exit code: !errorlevel!
-if !errorlevel! neq 0 (
-    echo  [ERROR - STEP 4] Failed to patch .csproj
-    echo  Exit code: !errorlevel!
-    goto :fail
-)
+echo  Handing game path to the build via MHZ_GAME_DIR...
+set "MHZ_GAME_DIR=!GAME_DIR!"
+echo  MHZ_GAME_DIR = !MHZ_GAME_DIR!
 
 echo  Running dotnet restore...
 "!DOTNET_EXE!" restore "!CSPROJ!" 2>&1
