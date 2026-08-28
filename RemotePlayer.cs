@@ -3,10 +3,6 @@ using UnityEngine;
 
 namespace MHZombieMultiplayer
 {
-    /// <summary>
-    /// Attached to the ghost helicopter object that represents a remote player.
-    /// Smoothly interpolates their position/rotation from received network packets.
-    /// </summary>
     public class RemotePlayer : MonoBehaviour
     {
         public CSteamID SteamId;
@@ -85,7 +81,6 @@ namespace MHZombieMultiplayer
                 gameObject.SetActive(active);
         }
 
-        /// <summary>Apply a received network state to this ghost heli.</summary>
         public void ApplyState(HeliStatePacket packet)
         {
             _targetPosition = packet.Position;

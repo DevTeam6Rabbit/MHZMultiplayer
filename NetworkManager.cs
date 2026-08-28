@@ -8,10 +8,6 @@ using UnityEngine;
 
 namespace MHZombieMultiplayer
 {
-    /// <summary>
-    /// Manages Steam P2P networking between players.
-    /// One player hosts; others connect via Steam lobby.
-    /// </summary>
     // pure p2p over steam, no server. one player hosts a lobby, the rest
     // join, then it's just packets flying between everyone.
     public class NetworkManager : MonoBehaviour
@@ -41,7 +37,6 @@ namespace MHZombieMultiplayer
         // Packet channel
         private const int Channel = 0;
 
-        /// <summary>Maximum players per lobby.</summary>
         public const int MaxPlayers = 16;
 
         private void Awake()
@@ -114,7 +109,6 @@ namespace MHZombieMultiplayer
 
         // ─── Joining ──────────────────────────────────────────────────────────
 
-        /// <summary>Called when a friend clicks "Join Game" in the Steam overlay.</summary>
         private void OnLobbyJoinRequested(GameLobbyJoinRequested_t cb)
         {
             SteamMatchmaking.JoinLobby(cb.m_steamIDLobby);

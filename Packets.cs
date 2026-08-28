@@ -11,7 +11,6 @@ namespace MHZombieMultiplayer
         RaceFinish = 3,
     }
 
-    /// <summary>Sent ~20 times/sec: helicopter position, rotation, velocity.</summary>
     public struct HeliStatePacket
     {
         public PacketType PacketType;
@@ -21,7 +20,6 @@ namespace MHZombieMultiplayer
         public Vector3 Velocity;
     }
 
-    /// <summary>Reliable chat message.</summary>
     public struct ChatPacket
     {
         public PacketType PacketType;
@@ -29,7 +27,6 @@ namespace MHZombieMultiplayer
         public string Message;
     }
 
-    /// <summary>Reliable, sent once when a player finishes a time trial run.</summary>
     public struct RaceFinishPacket
     {
         public PacketType PacketType;

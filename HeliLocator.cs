@@ -2,10 +2,6 @@ using UnityEngine;
 
 namespace MHZombieMultiplayer
 {
-    /// <summary>
-    /// Finds the local player's helicopter in the scene using the game's own tag/name conventions.
-    /// Falls back through several strategies.
-    /// </summary>
     // can't reference game types at compile time, so hunt by type name at
     // runtime. cached - FindObjectsOfType is slow and this gets called a lot.
     public static class HeliLocator
@@ -54,7 +50,6 @@ namespace MHZombieMultiplayer
             return null;
         }
 
-        /// <summary>Call this on scene load to clear the cached reference.</summary>
         public static void Invalidate() => _cachedHeli = null;
     }
 }
