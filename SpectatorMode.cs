@@ -22,12 +22,15 @@ namespace MHZombieMultiplayer
         private float _pitch, _yaw;
 
         // saved state so exiting puts everything back exactly as it was
+        private CursorLockMode _prevLockState;
+        private bool _prevCursorVisible;
         private GameObject _localHeli;
         private Rigidbody _heliRb;
         private bool _heliRbWasKinematic;
         private readonly List<Renderer> _hiddenRenderers = new List<Renderer>();
         private readonly List<Behaviour> _disabledScripts = new List<Behaviour>();
         private readonly List<Behaviour> _hiddenCanvases = new List<Behaviour>();
+        private readonly List<Camera> _disabledCameras = new List<Camera>();
 
         private void Awake()
         {
@@ -91,27 +94,53 @@ namespace MHZombieMultiplayer
                     { b.enabled = false; _disabledScripts.Add(b); }
             }
 
+            // grab the camera that's actually rendering right now
             _prevCamera = Camera.main;
+            if (_prevCamera == null || !_prevCamera.enabled || !_prevCamera.gameObject.activeInHierarchy)
+            {
+                foreach (Camera c in Camera.allCameras)
+                    if (c != null && c.enabled) { _prevCamera = c; break; }
+            }
+
             _freeCam = new GameObject("SpectatorCamera");
             Camera cam = _freeCam.AddComponent<Camera>();
-            cam.fieldOfView = 75f;
-            cam.nearClipPlane = 0.1f;
-            cam.farClipPlane = 15000f;
 
             if (_prevCamera != null)
             {
+                // clear flags, skybox, culling mask, depth - copy it all, or we
+                // end up staring at a flat coloured void instead of the world
+                cam.CopyFrom(_prevCamera);
                 _freeCam.transform.position = _prevCamera.transform.position;
                 _freeCam.transform.rotation = _prevCamera.transform.rotation;
-                _prevCamera.enabled = false;
             }
             else if (_localHeli != null)
             {
                 _freeCam.transform.position = _localHeli.transform.position + Vector3.up * 5f;
             }
 
+            cam.fieldOfView = 75f;
+            cam.nearClipPlane = 0.1f;
+            cam.farClipPlane = 15000f;
+            cam.depth = 100f; // draw on top of anything left enabled
+            cam.enabled = true;
+
+            // turn off every other camera so ours is the one you see
+            foreach (Camera c in Camera.allCameras)
+            {
+                if (c == null || c == cam || !c.enabled) continue;
+                c.enabled = false;
+                _disabledCameras.Add(c);
+            }
+
             _yaw = _freeCam.transform.eulerAngles.y;
             _pitch = _freeCam.transform.eulerAngles.x;
             if (_pitch > 180f) _pitch -= 360f;
+
+            // the game locks the cursor while flying; we need it back for the list
+            _prevLockState = Cursor.lockState;
+            _prevCursorVisible = Cursor.visible;
+            Cursor.lockState = CursorLockMode.None;
+            Cursor.visible = true;
 
             MultiplayerPlugin.Log.LogInfo("[Spectator] ON - WASD/QE move, hold right mouse to look, shift/ctrl speed, F8 player list, F7 exit.");
         }
@@ -136,16 +165,24 @@ namespace MHZombieMultiplayer
 
             if (_freeCam != null) Destroy(_freeCam);
             _freeCam = null;
+            foreach (Camera c in _disabledCameras) if (c != null) c.enabled = true;
+            _disabledCameras.Clear();
             if (_prevCamera != null) _prevCamera.enabled = true;
             _prevCamera = null;
+
+            Cursor.lockState = _prevLockState;
+            Cursor.visible = _prevCursorVisible;
 
             HeliLocator.Invalidate();
             MultiplayerPlugin.Log.LogInfo("[Spectator] OFF");
         }
 
+        private bool _justStartedFollowing;
+
         public void Follow(RemotePlayer player)
         {
             Following = player;
+            _justStartedFollowing = true;
             MultiplayerPlugin.Log.LogInfo($"[Spectator] Following {(player != null ? player.DisplayName : "nobody")}");
         }
 
@@ -162,8 +199,13 @@ namespace MHZombieMultiplayer
             {
                 if (Following.gameObject == null) { Following = null; return; }
                 Vector3 offset = Following.transform.rotation * new Vector3(0f, 5f, -15f);
-                _freeCam.transform.position = Vector3.Lerp(_freeCam.transform.position,
-                    Following.transform.position + offset, 10f * Time.deltaTime);
+                Vector3 wanted = Following.transform.position + offset;
+                // snap on the first frame, glide after - otherwise you spend a
+                // second flying across the map every time you switch target
+                _freeCam.transform.position = _justStartedFollowing
+                    ? wanted
+                    : Vector3.Lerp(_freeCam.transform.position, wanted, 10f * Time.unscaledDeltaTime);
+                _justStartedFollowing = false;
                 _freeCam.transform.LookAt(Following.transform.position);
                 return;
             }
@@ -187,7 +229,7 @@ namespace MHZombieMultiplayer
             if (Input.GetKey(KeyCode.E)) move += Vector3.up;
             if (Input.GetKey(KeyCode.Q)) move -= Vector3.up;
 
-            _freeCam.transform.position += move * speed * Time.deltaTime;
+            _freeCam.transform.position += move * speed * Time.unscaledDeltaTime;
         }
     }
 }
