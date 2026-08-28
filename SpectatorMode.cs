@@ -85,12 +85,18 @@ namespace MHZombieMultiplayer
                     { b.enabled = false; _hiddenCanvases.Add(b); }
             }
 
-            // camera scripts elsewhere in the scene would fight us
+            // scene-level scripts that would drag us out of spectator: the
+            // camera controllers fight us for the view, and the death/reset
+            // handlers will happily throw a game over while our heli sits
+            // parked with its scripts off.
             foreach (Behaviour b in FindObjectsOfType<Behaviour>())
             {
                 if (b == null || !b.enabled) continue;
                 string t = b.GetType().Name;
-                if (t.StartsWith("RW_") && t.Contains("Camera"))
+                bool cameraScript = t.StartsWith("RW_") && t.Contains("Camera");
+                bool endGameScript = t == "RW_On_Death" || t == "LevelReset" ||
+                                     t == "ForcedReset" || t == "RW_End_Game";
+                if (cameraScript || endGameScript)
                     { b.enabled = false; _disabledScripts.Add(b); }
             }
 
@@ -191,13 +197,52 @@ namespace MHZombieMultiplayer
             Following = null;
         }
 
+        private static bool StillInLobby(RemotePlayer rp)
+        {
+            var nm = NetworkManager.Instance;
+            if (nm == null) return false;
+            foreach (var kv in nm.RemotePlayers)
+                if (kv.Value == rp) return true;
+            return false;
+        }
+
+        // next player in the lobby, skipping the one we just lost
+        private static RemotePlayer NextPlayerAfter(RemotePlayer previous)
+        {
+            var nm = NetworkManager.Instance;
+            if (nm == null) return null;
+            foreach (var kv in nm.RemotePlayers)
+            {
+                RemotePlayer rp = kv.Value;
+                if (rp != null && rp != previous && rp.gameObject != null)
+                    return rp;
+            }
+            return null;
+        }
+
         private void Update()
         {
             if (!IsSpectating || _freeCam == null) return;
 
             if (Following != null)
             {
-                if (Following.gameObject == null) { Following = null; return; }
+                // they restarted, crashed out, finished, or left - move on to
+                // whoever else is flying instead of staring at nothing
+                if (Following == null || Following.gameObject == null || !StillInLobby(Following))
+                {
+                    RemotePlayer next = NextPlayerAfter(Following);
+                    if (next != null)
+                    {
+                        MultiplayerPlugin.Log.LogInfo("[Spectator] Target gone - switching to " + next.DisplayName);
+                        Follow(next);
+                    }
+                    else
+                    {
+                        MultiplayerPlugin.Log.LogInfo("[Spectator] Target gone - back to free camera");
+                        Following = null;
+                    }
+                    return;
+                }
                 Vector3 offset = Following.transform.rotation * new Vector3(0f, 5f, -15f);
                 Vector3 wanted = Following.transform.position + offset;
                 // snap on the first frame, glide after - otherwise you spend a
