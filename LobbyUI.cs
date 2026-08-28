@@ -36,6 +36,9 @@ namespace MHZombieMultiplayer
 
         private void Update()
         {
+            if (Input.GetKeyDown(KeyCode.F7) && SpectatorMode.Instance != null)
+                SpectatorMode.Instance.Toggle();
+
             if (Input.GetKeyDown(KeyCode.F8))
                 _showPanel = !_showPanel;
 
@@ -54,6 +57,14 @@ namespace MHZombieMultiplayer
 
         private void OnGUI()
         {
+            var spectator = SpectatorMode.Instance;
+            if (spectator != null && spectator.IsSpectating)
+            {
+                // clean screen - only the player list, and only if F8 asked for it
+                if (_showPanel) DrawSpectatorPicker(spectator);
+                return;
+            }
+
             if (_showPanel)
                 _panelRect = GUILayout.Window(9001, _panelRect, DrawLobbyPanel, "MHZ Multiplayer");
 
@@ -161,21 +172,9 @@ namespace MHZombieMultiplayer
                     GUILayout.Label($"  • {SteamFriends.GetFriendPersonaName(member)}{(isSelf ? " (You)" : "")}");
                     GUILayout.FlexibleSpace();
                     // can only spectate people we actually have a ghost for
-                    if (!isSelf && nm.RemotePlayers.ContainsKey(member) &&
-                        GUILayout.Button("Spectate", GUILayout.Width(70)))
-                        SpectateManager.Start(member);
                     GUILayout.EndHorizontal();
                 }
 
-                if (SpectateManager.IsSpectating)
-                {
-                    GUILayout.Space(4);
-                    GUILayout.BeginHorizontal();
-                    GUILayout.Label($"Spectating: {SpectateManager.TargetName}");
-                    if (GUILayout.Button("Stop", GUILayout.Width(50)))
-                        SpectateManager.Stop();
-                    GUILayout.EndHorizontal();
-                }
 
                 GUILayout.Space(8);
                 if (GUILayout.Button("Toggle Chat"))
@@ -186,7 +185,7 @@ namespace MHZombieMultiplayer
 
                 if (GUILayout.Button("Leave Lobby (F10)"))
                 {
-                    SpectateManager.Stop();
+                    SpectatorMode.Instance?.Exit();
                     nm.LeaveLobby();
                     _showChat = false;
                     _chatMessages.Clear();
@@ -194,12 +193,46 @@ namespace MHZombieMultiplayer
             }
 
             GUILayout.Space(8);
+            if (GUILayout.Button("Spectator Mode (F7)") && SpectatorMode.Instance != null)
+                SpectatorMode.Instance.Enter();
+
             if (GUILayout.Button(HeliVisibility.Hidden ? "Show My Heli Model" : "Hide My Heli Model"))
                 HeliVisibility.Toggle();
 
             GUILayout.Label("F8 = toggle this panel");
 
             GUI.DragWindow();
+        }
+
+        // bare list of players you can click to follow while spectating
+        private void DrawSpectatorPicker(SpectatorMode spectator)
+        {
+            var nm = NetworkManager.Instance;
+            GUILayout.BeginArea(new Rect(20, 20, 250, 320), GUI.skin.box);
+            GUILayout.Label("SPECTATING");
+            GUILayout.Space(4);
+
+            if (GUILayout.Button(spectator.Following == null ? "> Free camera" : "Free camera"))
+                spectator.StopFollowing();
+
+            if (nm != null && nm.IsConnected)
+            {
+                foreach (var kv in nm.RemotePlayers)
+                {
+                    RemotePlayer rp = kv.Value;
+                    if (rp == null) continue;
+                    if (GUILayout.Button((spectator.Following == rp ? "> " : "") + rp.DisplayName))
+                        spectator.Follow(rp);
+                }
+            }
+
+            GUILayout.Space(8);
+            GUILayout.Label("WASD + Q/E  move");
+            GUILayout.Label("right mouse  look");
+            GUILayout.Label("shift fast / ctrl slow");
+            GUILayout.Label("F8  hide this list");
+            GUILayout.Label("F7  leave spectator");
+            GUILayout.EndArea();
         }
 
         private void DrawChatPanel(int id)
