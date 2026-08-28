@@ -31,6 +31,13 @@ namespace MHZombieMultiplayer
         private readonly List<Behaviour> _disabledScripts = new List<Behaviour>();
         private readonly List<Behaviour> _hiddenCanvases = new List<Behaviour>();
         private readonly List<Camera> _disabledCameras = new List<Camera>();
+        private readonly List<Collider> _disabledColliders = new List<Collider>();
+        private Transform _heliRoot;
+        private RigidbodyConstraints _heliRbConstraints;
+        private bool _heliRbDetect;
+        private Vector3 _heliParkedAt;
+        private Quaternion _heliParkedRot;
+        private float _nextHeliCheck;
 
         private void Awake()
         {
@@ -53,28 +60,41 @@ namespace MHZombieMultiplayer
             _localHeli = HeliLocator.GetLocalHeli();
             if (_localHeli != null)
             {
-                Transform root = _localHeli.transform.root != null ? _localHeli.transform.root : _localHeli.transform;
+                _heliRoot = _localHeli.transform.root != null ? _localHeli.transform.root : _localHeli.transform;
 
-                foreach (Renderer r in root.GetComponentsInChildren<Renderer>(true))
+                foreach (Renderer r in _heliRoot.GetComponentsInChildren<Renderer>(true))
                     if (r != null && r.enabled) { r.enabled = false; _hiddenRenderers.Add(r); }
 
-                // frozen where it sits, so it can't crash while we're away
-                _heliRb = root.GetComponentInChildren<Rigidbody>();
+                // EVERY script on the heli goes off, not just the RW_ ones.
+                // if we leave any input or flight script running, WASD flies
+                // the real heli while we fly the camera - straight into a hill.
+                foreach (Behaviour b in _heliRoot.GetComponentsInChildren<Behaviour>(true))
+                {
+                    if (b == null || !b.enabled) continue;
+                    if (b == this || b is LobbyUI || b is NetworkManager || b is RemotePlayer) continue;
+                    b.enabled = false;
+                    _disabledScripts.Add(b);
+                }
+
+                // colliders off so nothing can register a crash against it
+                foreach (Collider col in _heliRoot.GetComponentsInChildren<Collider>(true))
+                    if (col != null && col.enabled) { col.enabled = false; _disabledColliders.Add(col); }
+
+                // and pin the body in place
+                _heliRb = _heliRoot.GetComponentInChildren<Rigidbody>();
                 if (_heliRb != null)
                 {
                     _heliRbWasKinematic = _heliRb.isKinematic;
+                    _heliRbConstraints = _heliRb.constraints;
+                    _heliRbDetect = _heliRb.detectCollisions;
                     _heliRb.velocity = Vector3.zero;
                     _heliRb.angularVelocity = Vector3.zero;
                     _heliRb.isKinematic = true;
+                    _heliRb.detectCollisions = false;
+                    _heliRb.constraints = RigidbodyConstraints.FreezeAll;
                 }
-
-                foreach (Behaviour b in root.GetComponentsInChildren<Behaviour>(true))
-                {
-                    if (b == null || !b.enabled) continue;
-                    string t = b.GetType().Name;
-                    if (t.StartsWith("RW_") || t.StartsWith("HeliSim"))
-                        { b.enabled = false; _disabledScripts.Add(b); }
-                }
+                _heliParkedAt = _heliRoot.position;
+                _heliParkedRot = _heliRoot.rotation;
             }
 
             // every game HUD canvas off - clean screen. found by type name so
@@ -184,8 +204,19 @@ namespace MHZombieMultiplayer
             foreach (Behaviour c in _hiddenCanvases) if (c != null) { c.enabled = true; restoredC++; }
             _hiddenCanvases.Clear();
 
-            if (_heliRb != null) _heliRb.isKinematic = _heliRbWasKinematic;
+            foreach (Collider col in _disabledColliders) if (col != null) col.enabled = true;
+            _disabledColliders.Clear();
+
+            if (_heliRb != null)
+            {
+                _heliRb.constraints = _heliRbConstraints;
+                _heliRb.detectCollisions = _heliRbDetect;
+                _heliRb.isKinematic = _heliRbWasKinematic;
+                _heliRb.velocity = Vector3.zero;
+                _heliRb.angularVelocity = Vector3.zero;
+            }
             _heliRb = null;
+            _heliRoot = null;
 
             if (_freeCam != null) Destroy(_freeCam);
             _freeCam = null;
@@ -233,6 +264,40 @@ namespace MHZombieMultiplayer
             {
                 MultiplayerPlugin.Log.LogInfo($"[Spectator] {playerName} finished - nobody else to watch, free camera");
                 Following = null;
+            }
+        }
+
+        // the game re-enables its own scripts on respawn/scene events, which
+        // would hand control back to a heli we're not looking at. so we hold
+        // it down: anything that woke up gets switched off again, and the heli
+        // gets put back exactly where we parked it.
+        private void KeepHeliParked()
+        {
+            if (_heliRoot == null || Time.unscaledTime < _nextHeliCheck) return;
+            _nextHeliCheck = Time.unscaledTime + 0.25f;
+
+            int rewoken = 0;
+            foreach (Behaviour b in _disabledScripts)
+                if (b != null && b.enabled) { b.enabled = false; rewoken++; }
+            if (rewoken > 0)
+                MultiplayerPlugin.Log.LogInfo($"[Spectator] {rewoken} game script(s) re-enabled themselves - disabled again");
+
+            foreach (Collider col in _disabledColliders)
+                if (col != null && col.enabled) col.enabled = false;
+
+            if (_heliRb != null && !_heliRb.isKinematic)
+            {
+                _heliRb.isKinematic = true;
+                _heliRb.detectCollisions = false;
+                MultiplayerPlugin.Log.LogInfo("[Spectator] Heli rigidbody woke up - re-frozen");
+            }
+
+            float drift = Vector3.Distance(_heliRoot.position, _heliParkedAt);
+            if (drift > 1f)
+            {
+                _heliRoot.position = _heliParkedAt;
+                _heliRoot.rotation = _heliParkedRot;
+                MultiplayerPlugin.Log.LogInfo($"[Spectator] Heli drifted {drift:F1}m - moved back to its parking spot");
             }
         }
 
@@ -303,8 +368,11 @@ namespace MHZombieMultiplayer
                     : Vector3.Lerp(_freeCam.transform.position, wanted, 10f * Time.unscaledDeltaTime);
                 _justStartedFollowing = false;
                 _freeCam.transform.LookAt(Following.transform.position);
+                KeepHeliParked();
                 return;
             }
+
+            KeepHeliParked();
 
             // hold right mouse to look, so the cursor still works for the list
             if (Input.GetMouseButton(1))
