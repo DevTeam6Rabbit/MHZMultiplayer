@@ -20,6 +20,13 @@ namespace MHZombieMultiplayer
         private const float SlowSpeed = 12f;
         private const float LookSens = 2f;
         private float _pitch, _yaw;
+        private float _targetPitch, _targetYaw;
+        private Vector3 _moveVelocity;      // for SmoothDamp on free-cam movement
+        private Vector3 _followVelocity;    // for SmoothDamp on the chase cam
+        private Vector3 _moveAccel;         // SmoothDamp scratch for movement
+        private const float MoveSmooth = 0.12f;   // accel/decel feel
+        private const float LookSmooth = 0.05f;   // mouse damping
+        private const float FollowSmooth = 0.25f; // chase cam damping
 
         // saved state so exiting puts everything back exactly as it was
         private CursorLockMode _prevLockState;
@@ -167,6 +174,10 @@ namespace MHZombieMultiplayer
             _yaw = _freeCam.transform.eulerAngles.y;
             _pitch = _freeCam.transform.eulerAngles.x;
             if (_pitch > 180f) _pitch -= 360f;
+            _targetYaw = _yaw;
+            _targetPitch = _pitch;
+            _moveVelocity = Vector3.zero;
+            _followVelocity = Vector3.zero;
 
             // the game locks the cursor while flying; we need it back for the list
             _prevLockState = Cursor.lockState;
@@ -326,7 +337,7 @@ namespace MHZombieMultiplayer
 
         private bool _warnedNoCam;
 
-        private void Update()
+        private void LateUpdate()
         {
             if (!IsSpectating) return;
             if (_freeCam == null)
@@ -361,39 +372,69 @@ namespace MHZombieMultiplayer
                 }
                 Vector3 offset = Following.transform.rotation * new Vector3(0f, 5f, -15f);
                 Vector3 wanted = Following.transform.position + offset;
-                // snap on the first frame, glide after - otherwise you spend a
-                // second flying across the map every time you switch target
-                _freeCam.transform.position = _justStartedFollowing
-                    ? wanted
-                    : Vector3.Lerp(_freeCam.transform.position, wanted, 10f * Time.unscaledDeltaTime);
-                _justStartedFollowing = false;
-                _freeCam.transform.LookAt(Following.transform.position);
+
+                if (_justStartedFollowing)
+                {
+                    // land straight on the shot instead of flying across the map
+                    _freeCam.transform.position = wanted;
+                    _freeCam.transform.rotation = Quaternion.LookRotation(
+                        Following.transform.position - wanted);
+                    _followVelocity = Vector3.zero;
+                    _justStartedFollowing = false;
+                }
+                else
+                {
+                    // SmoothDamp eases in and out, so network jitter on their
+                    // position doesn't translate into a twitchy camera
+                    _freeCam.transform.position = Vector3.SmoothDamp(
+                        _freeCam.transform.position, wanted, ref _followVelocity,
+                        FollowSmooth, Mathf.Infinity, Time.unscaledDeltaTime);
+
+                    Vector3 lookAt = Following.transform.position + Vector3.up * 1.5f;
+                    Vector3 dir = lookAt - _freeCam.transform.position;
+                    if (dir.sqrMagnitude > 0.001f)
+                        _freeCam.transform.rotation = Quaternion.Slerp(
+                            _freeCam.transform.rotation, Quaternion.LookRotation(dir),
+                            1f - Mathf.Exp(-8f * Time.unscaledDeltaTime));
+                }
+
                 KeepHeliParked();
                 return;
             }
 
             KeepHeliParked();
 
-            // hold right mouse to look, so the cursor still works for the list
+            float dt = Time.unscaledDeltaTime;
+
+            // hold right mouse to look, so the cursor still works for the list.
+            // raw mouse deltas go into a target angle and the camera eases
+            // toward it - kills the frame-to-frame twitchiness.
             if (Input.GetMouseButton(1))
             {
-                _yaw += Input.GetAxis("Mouse X") * LookSens;
-                _pitch = Mathf.Clamp(_pitch - Input.GetAxis("Mouse Y") * LookSens, -89f, 89f);
+                _targetYaw += Input.GetAxis("Mouse X") * LookSens;
+                _targetPitch = Mathf.Clamp(_targetPitch - Input.GetAxis("Mouse Y") * LookSens, -89f, 89f);
             }
+            float lookT = 1f - Mathf.Exp(-dt / Mathf.Max(LookSmooth, 0.0001f));
+            _yaw = Mathf.LerpAngle(_yaw, _targetYaw, lookT);
+            _pitch = Mathf.LerpAngle(_pitch, _targetPitch, lookT);
             _freeCam.transform.rotation = Quaternion.Euler(_pitch, _yaw, 0f);
 
             // noclip: the camera has no collider, nothing stops it
             float speed = Input.GetKey(KeyCode.LeftShift) ? FastSpeed
                         : Input.GetKey(KeyCode.LeftControl) ? SlowSpeed : MoveSpeed;
-            Vector3 move = Vector3.zero;
-            if (Input.GetKey(KeyCode.W)) move += _freeCam.transform.forward;
-            if (Input.GetKey(KeyCode.S)) move -= _freeCam.transform.forward;
-            if (Input.GetKey(KeyCode.A)) move -= _freeCam.transform.right;
-            if (Input.GetKey(KeyCode.D)) move += _freeCam.transform.right;
-            if (Input.GetKey(KeyCode.E)) move += Vector3.up;
-            if (Input.GetKey(KeyCode.Q)) move -= Vector3.up;
+            Vector3 input = Vector3.zero;
+            if (Input.GetKey(KeyCode.W)) input += _freeCam.transform.forward;
+            if (Input.GetKey(KeyCode.S)) input -= _freeCam.transform.forward;
+            if (Input.GetKey(KeyCode.A)) input -= _freeCam.transform.right;
+            if (Input.GetKey(KeyCode.D)) input += _freeCam.transform.right;
+            if (Input.GetKey(KeyCode.E)) input += Vector3.up;
+            if (Input.GetKey(KeyCode.Q)) input -= Vector3.up;
+            if (input.sqrMagnitude > 1f) input.Normalize(); // no free speed on diagonals
 
-            _freeCam.transform.position += move * speed * Time.unscaledDeltaTime;
+            // ease into and out of motion instead of snapping on/off
+            Vector3 wantedVel = input * speed;
+            _moveVelocity = Vector3.SmoothDamp(_moveVelocity, wantedVel, ref _moveAccel, MoveSmooth, Mathf.Infinity, dt);
+            _freeCam.transform.position += _moveVelocity * dt;
         }
     }
 }
