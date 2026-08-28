@@ -34,11 +34,6 @@ namespace MHZombieMultiplayer
             return ghost;
         }
 
-        /// <summary>
-        /// Attempts to copy the local heli's meshes into ghostRoot.
-        /// Returns the number of renderers copied (0 if no heli exists yet).
-        /// Safe to call repeatedly until it succeeds.
-        /// </summary>
         public static int TryBuildVisuals(Transform ghostRoot)
         {
             GameObject located = HeliLocator.GetLocalHeli();
@@ -68,11 +63,6 @@ namespace MHZombieMultiplayer
             return null;
         }
 
-        /// <summary>
-        /// Copies every mesh under sourceRoot into ghostRoot as bare
-        /// MeshFilter+MeshRenderer children, preserving relative pose and
-        /// original materials. Returns the number of renderers copied.
-        /// </summary>
         private static int CopyVisuals(Transform sourceRoot, Transform ghostRoot)
         {
             int count = 0;
@@ -122,7 +112,6 @@ namespace MHZombieMultiplayer
         }
     }
 
-    /// <summary>Spins rotor/blade meshes on the remote heli copy for visual effect.</summary>
     public class RotorSpinner : MonoBehaviour
     {
         private const float DegreesPerSecond = 1800f;

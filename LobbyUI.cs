@@ -4,10 +4,6 @@ using UnityEngine;
 
 namespace MHZombieMultiplayer
 {
-    /// <summary>
-    /// Simple IMGUI overlay: lobby panel + chat.
-    /// Toggle with F8. Host with F9. Leave with F10.
-    /// </summary>
     // old-school IMGUI. ugly but zero setup, and it can't clash with
     // whatever UI system the game uses.
     public class LobbyUI : MonoBehaviour
@@ -105,7 +101,6 @@ namespace MHZombieMultiplayer
             GUI.DragWindow();
         }
 
-        /// <summary>Pops the scoreboard open (called when a new time is posted).</summary>
         public void ShowScoreboard() => _showScoreboard = true;
 
         private void DrawLobbyPanel(int id)

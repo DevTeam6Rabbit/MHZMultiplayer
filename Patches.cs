@@ -4,9 +4,6 @@ using UnityEngine.SceneManagement;
 
 namespace MHZombieMultiplayer
 {
-    /// <summary>
-    /// Harmony patches to hook into the game lifecycle.
-    /// </summary>
     // heads up: if any TargetMethod() here returns null, PatchAll kills
     // every patch at once. the important hooks install themselves separately
     // because of exactly that.

@@ -6,10 +6,6 @@ using Steamworks;
 
 namespace MHZombieMultiplayer
 {
-    /// <summary>
-    /// Session scoreboard for time trial results. Keeps each player's best
-    /// time, sorted fastest first. Local finishes are broadcast to the lobby.
-    /// </summary>
     public static class ScoreboardManager
     {
         public struct ScoreEntry
@@ -20,7 +16,6 @@ namespace MHZombieMultiplayer
 
         public static readonly List<ScoreEntry> Entries = new List<ScoreEntry>();
 
-        /// <summary>Called when the LOCAL player finishes a run.</summary>
         public static void ReportLocalFinish(float timeSeconds)
         {
             string name = SteamFriends.GetPersonaName();
@@ -30,7 +25,6 @@ namespace MHZombieMultiplayer
             LobbyUI.Instance?.ShowScoreboard();
         }
 
-        /// <summary>Called when a REMOTE player's finish packet arrives.</summary>
         public static void ReportRemoteFinish(string name, float timeSeconds)
         {
             AddEntry(name, timeSeconds);
@@ -66,14 +60,6 @@ namespace MHZombieMultiplayer
         }
     }
 
-    /// <summary>
-    /// Hooks the game's race controller to capture time trial results.
-    ///
-    /// Verified against the game's Assembly-CSharp: the RW_Race component runs
-    /// races. Its "time" field is the live timer (reset in OnEnable), and
-    /// EndRound() copies it into "endTime" when the run completes - so we
-    /// postfix EndRound and read endTime for the final result.
-    /// </summary>
     // RW_Race.EndRound() writes the final time into endTime, that's our
     // hook. don't grab maxTime by accident - that's the par time.
     public static class TimeTrialHook
@@ -83,7 +69,6 @@ namespace MHZombieMultiplayer
         private static FieldInfo _endTimeField;
         private static FieldInfo _timeField;
 
-        /// <summary>Finds a game type by full name, falling back to a scan by simple name.</summary>
         // game classes live in the Raulworks namespace, plain names return
         // null. name-scan fallback in case an update moves things around.
         public static Type FindGameType(string fullName, string simpleName)
