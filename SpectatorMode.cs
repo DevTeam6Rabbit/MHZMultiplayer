@@ -48,6 +48,7 @@ namespace MHZombieMultiplayer
             if (IsSpectating) return;
             IsSpectating = true;
             Following = null;
+            _warnedNoCam = false;
 
             _localHeli = HeliLocator.GetLocalHeli();
             if (_localHeli != null)
@@ -97,7 +98,12 @@ namespace MHZombieMultiplayer
                 bool endGameScript = t == "RW_On_Death" || t == "LevelReset" ||
                                      t == "ForcedReset" || t == "RW_End_Game";
                 if (cameraScript || endGameScript)
-                    { b.enabled = false; _disabledScripts.Add(b); }
+                {
+                    b.enabled = false;
+                    _disabledScripts.Add(b);
+                    if (endGameScript)
+                        MultiplayerPlugin.Log.LogInfo($"[Spectator] Disabled end-game script: {t}");
+                }
             }
 
             // grab the camera that's actually rendering right now
@@ -149,6 +155,16 @@ namespace MHZombieMultiplayer
             Cursor.visible = true;
 
             MultiplayerPlugin.Log.LogInfo("[Spectator] ON - WASD/QE move, hold right mouse to look, shift/ctrl speed, F8 player list, F7 exit.");
+            MultiplayerPlugin.Log.LogInfo(
+                $"[Spectator] heli={(_localHeli != null ? _localHeli.name : "NOT FOUND")} " +
+                $"renderersHidden={_hiddenRenderers.Count} scriptsDisabled={_disabledScripts.Count} " +
+                $"canvasesHidden={_hiddenCanvases.Count} otherCamerasOff={_disabledCameras.Count}");
+            if (_prevCamera == null)
+                MultiplayerPlugin.Log.LogWarning("[Spectator] No active camera found to copy - view may look wrong. Report this log.");
+            if (_localHeli == null)
+                MultiplayerPlugin.Log.LogWarning("[Spectator] Local heli not found - your heli may still be visible/flying. Report this log.");
+            if (_disabledScripts.Count == 0)
+                MultiplayerPlugin.Log.LogWarning("[Spectator] No game scripts were disabled - death/reset handlers may still fire. Report this log.");
         }
 
         public void Exit()
@@ -157,13 +173,15 @@ namespace MHZombieMultiplayer
             IsSpectating = false;
             Following = null;
 
-            foreach (Renderer r in _hiddenRenderers) if (r != null) r.enabled = true;
+            int restoredR = 0, restoredS = 0, restoredC = 0, restoredCam = 0;
+
+            foreach (Renderer r in _hiddenRenderers) if (r != null) { r.enabled = true; restoredR++; }
             _hiddenRenderers.Clear();
 
-            foreach (Behaviour b in _disabledScripts) if (b != null) b.enabled = true;
+            foreach (Behaviour b in _disabledScripts) if (b != null) { b.enabled = true; restoredS++; }
             _disabledScripts.Clear();
 
-            foreach (Behaviour c in _hiddenCanvases) if (c != null) c.enabled = true;
+            foreach (Behaviour c in _hiddenCanvases) if (c != null) { c.enabled = true; restoredC++; }
             _hiddenCanvases.Clear();
 
             if (_heliRb != null) _heliRb.isKinematic = _heliRbWasKinematic;
@@ -171,7 +189,7 @@ namespace MHZombieMultiplayer
 
             if (_freeCam != null) Destroy(_freeCam);
             _freeCam = null;
-            foreach (Camera c in _disabledCameras) if (c != null) c.enabled = true;
+            foreach (Camera c in _disabledCameras) if (c != null) { c.enabled = true; restoredCam++; }
             _disabledCameras.Clear();
             if (_prevCamera != null) _prevCamera.enabled = true;
             _prevCamera = null;
@@ -180,7 +198,9 @@ namespace MHZombieMultiplayer
             Cursor.visible = _prevCursorVisible;
 
             HeliLocator.Invalidate();
-            MultiplayerPlugin.Log.LogInfo("[Spectator] OFF");
+            MultiplayerPlugin.Log.LogInfo(
+                $"[Spectator] OFF - restored {restoredR} renderers, {restoredS} scripts, " +
+                $"{restoredC} canvases, {restoredCam} cameras");
         }
 
         private bool _justStartedFollowing;
@@ -195,6 +215,25 @@ namespace MHZombieMultiplayer
         public void StopFollowing()
         {
             Following = null;
+        }
+
+        // called by the scoreboard when a remote player crosses the line
+        public void OnPlayerFinished(string playerName)
+        {
+            if (!IsSpectating || Following == null) return;
+            if (Following.DisplayName != playerName) return;
+
+            RemotePlayer next = NextPlayerAfter(Following);
+            if (next != null)
+            {
+                MultiplayerPlugin.Log.LogInfo($"[Spectator] {playerName} finished - switching to {next.DisplayName}");
+                Follow(next);
+            }
+            else
+            {
+                MultiplayerPlugin.Log.LogInfo($"[Spectator] {playerName} finished - nobody else to watch, free camera");
+                Following = null;
+            }
         }
 
         private static bool StillInLobby(RemotePlayer rp)
@@ -220,9 +259,21 @@ namespace MHZombieMultiplayer
             return null;
         }
 
+        private bool _warnedNoCam;
+
         private void Update()
         {
-            if (!IsSpectating || _freeCam == null) return;
+            if (!IsSpectating) return;
+            if (_freeCam == null)
+            {
+                if (!_warnedNoCam)
+                {
+                    _warnedNoCam = true;
+                    MultiplayerPlugin.Log.LogError("[Spectator] Camera object vanished while spectating - exiting. Report this log.");
+                }
+                Exit();
+                return;
+            }
 
             if (Following != null)
             {

@@ -28,6 +28,8 @@ namespace MHZombieMultiplayer
         public static void ReportRemoteFinish(string name, float timeSeconds)
         {
             AddEntry(name, timeSeconds);
+            // if a spectator is watching this player, move them along
+            SpectatorMode.Instance?.OnPlayerFinished(name);
             LobbyUI.Instance?.AddChatMessage($"[Race] {name} finished in {FormatTime(timeSeconds)}!");
             LobbyUI.Instance?.ShowScoreboard();
         }
