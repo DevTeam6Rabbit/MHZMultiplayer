@@ -27,7 +27,7 @@ namespace MHZombieMultiplayer
         private bool _heliRbWasKinematic;
         private readonly List<Renderer> _hiddenRenderers = new List<Renderer>();
         private readonly List<Behaviour> _disabledScripts = new List<Behaviour>();
-        private readonly List<Canvas> _hiddenCanvases = new List<Canvas>();
+        private readonly List<Behaviour> _hiddenCanvases = new List<Behaviour>();
 
         private void Awake()
         {
@@ -73,9 +73,14 @@ namespace MHZombieMultiplayer
                 }
             }
 
-            // every game HUD canvas off - clean screen
-            foreach (Canvas c in FindObjectsOfType<Canvas>())
-                if (c != null && c.enabled) { c.enabled = false; _hiddenCanvases.Add(c); }
+            // every game HUD canvas off - clean screen. found by type name so
+            // we don't have to reference UnityEngine.UIModule at compile time.
+            foreach (Behaviour b in FindObjectsOfType<Behaviour>())
+            {
+                if (b == null || !b.enabled) continue;
+                if (b.GetType().Name == "Canvas")
+                    { b.enabled = false; _hiddenCanvases.Add(b); }
+            }
 
             // camera scripts elsewhere in the scene would fight us
             foreach (Behaviour b in FindObjectsOfType<Behaviour>())
@@ -123,7 +128,7 @@ namespace MHZombieMultiplayer
             foreach (Behaviour b in _disabledScripts) if (b != null) b.enabled = true;
             _disabledScripts.Clear();
 
-            foreach (Canvas c in _hiddenCanvases) if (c != null) c.enabled = true;
+            foreach (Behaviour c in _hiddenCanvases) if (c != null) c.enabled = true;
             _hiddenCanvases.Clear();
 
             if (_heliRb != null) _heliRb.isKinematic = _heliRbWasKinematic;
