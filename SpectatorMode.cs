@@ -67,20 +67,25 @@ namespace MHZombieMultiplayer
             _localHeli = HeliLocator.GetLocalHeli();
             if (_localHeli != null)
             {
-                _heliRoot = _localHeli.transform.root != null ? _localHeli.transform.root : _localHeli.transform;
+                // NOT transform.root - that climbs to a scene-wide parent and
+                // we end up disabling half the level. Walk up only while the
+                // parent still looks like part of the heli (has renderers and
+                // isn't the scene root itself).
+                _heliRoot = FindHeliRoot(_localHeli.transform);
 
                 foreach (Renderer r in _heliRoot.GetComponentsInChildren<Renderer>(true))
                     if (r != null && r.enabled) { r.enabled = false; _hiddenRenderers.Add(r); }
 
-                // EVERY script on the heli goes off, not just the RW_ ones.
-                // if we leave any input or flight script running, WASD flies
-                // the real heli while we fly the camera - straight into a hill.
+                // only the heli's own flight/input scripts - anything broader
+                // takes the rest of the game down with it
                 foreach (Behaviour b in _heliRoot.GetComponentsInChildren<Behaviour>(true))
                 {
                     if (b == null || !b.enabled) continue;
                     if (b == this || b is LobbyUI || b is NetworkManager || b is RemotePlayer) continue;
-                    b.enabled = false;
-                    _disabledScripts.Add(b);
+                    string t = b.GetType().Name;
+                    if (t.StartsWith("RW_") || t.StartsWith("HeliSim") ||
+                        t.Contains("Input") || t.Contains("Controller") || t.Contains("Heli"))
+                        { b.enabled = false; _disabledScripts.Add(b); }
                 }
 
                 // colliders off so nothing can register a crash against it
@@ -188,6 +193,7 @@ namespace MHZombieMultiplayer
             MultiplayerPlugin.Log.LogInfo("[Spectator] ON - WASD/QE move, hold right mouse to look, shift/ctrl speed, F8 player list, F7 exit.");
             MultiplayerPlugin.Log.LogInfo(
                 $"[Spectator] heli={(_localHeli != null ? _localHeli.name : "NOT FOUND")} " +
+                $"root={(_heliRoot != null ? _heliRoot.name : "-")} " +
                 $"renderersHidden={_hiddenRenderers.Count} scriptsDisabled={_disabledScripts.Count} " +
                 $"canvasesHidden={_hiddenCanvases.Count} otherCamerasOff={_disabledCameras.Count}");
             if (_prevCamera == null)
@@ -196,6 +202,32 @@ namespace MHZombieMultiplayer
                 MultiplayerPlugin.Log.LogWarning("[Spectator] Local heli not found - your heli may still be visible/flying. Report this log.");
             if (_disabledScripts.Count == 0)
                 MultiplayerPlugin.Log.LogWarning("[Spectator] No game scripts were disabled - death/reset handlers may still fire. Report this log.");
+            if (_disabledScripts.Count > 80)
+                MultiplayerPlugin.Log.LogWarning($"[Spectator] Disabled {_disabledScripts.Count} scripts - that looks like too much of the scene. Report this log.");
+        }
+
+        // climb from the heli's control object up to the object that holds the
+        // model, but no further - one level past the last thing with renderers
+        // and we'd be grabbing the entire scene.
+        private static Transform FindHeliRoot(Transform start)
+        {
+            Transform best = start;
+            Transform t = start;
+            int hops = 0;
+            while (t.parent != null && hops < 4)
+            {
+                t = t.parent;
+                hops++;
+                // a parent holding a rigidbody or renderers is still the heli
+                if (t.GetComponent<Rigidbody>() != null ||
+                    t.GetComponentsInChildren<Renderer>(true).Length > 0)
+                {
+                    // but bail if it looks like a scene container
+                    if (t.GetComponentsInChildren<Behaviour>(true).Length > 120) break;
+                    best = t;
+                }
+            }
+            return best;
         }
 
         public void Exit()
