@@ -227,7 +227,9 @@ namespace MHZombieMultiplayer
             }
 
             GUILayout.Space(8);
-            GUILayout.Label("WASD + Q/E  move");
+            GUILayout.Label("WASD  move");
+            GUILayout.Label("space / C  up / down");
+            GUILayout.Label("Q / E  cycle players");
             GUILayout.Label("right mouse  look");
             GUILayout.Label("shift fast / ctrl slow");
             GUILayout.Label("F8  hide this list");

@@ -190,7 +190,7 @@ namespace MHZombieMultiplayer
             Cursor.lockState = CursorLockMode.None;
             Cursor.visible = true;
 
-            MultiplayerPlugin.Log.LogInfo("[Spectator] ON - WASD/QE move, hold right mouse to look, shift/ctrl speed, F8 player list, F7 exit.");
+            MultiplayerPlugin.Log.LogInfo("[Spectator] ON - WASD move, space/C up-down, Q/E cycle players, right mouse look, shift/ctrl speed, F8 list, F7 exit.");
             MultiplayerPlugin.Log.LogInfo(
                 $"[Spectator] heli={(_localHeli != null ? _localHeli.name : "NOT FOUND")} " +
                 $"root={(_heliRoot != null ? _heliRoot.name : "-")} " +
@@ -344,6 +344,40 @@ namespace MHZombieMultiplayer
             }
         }
 
+        // step through the lobby in order. wraps around, and stepping past
+        // the end drops you back into free camera so you can always get out.
+        private void CycleTarget(int direction)
+        {
+            var nm = NetworkManager.Instance;
+            if (nm == null || !nm.IsConnected) return;
+
+            List<RemotePlayer> players = new List<RemotePlayer>();
+            foreach (var kv in nm.RemotePlayers)
+                if (kv.Value != null && kv.Value.gameObject != null)
+                    players.Add(kv.Value);
+
+            if (players.Count == 0)
+            {
+                MultiplayerPlugin.Log.LogInfo("[Spectator] Nobody to cycle to");
+                return;
+            }
+
+            int index = Following == null ? -1 : players.IndexOf(Following);
+            int next = index + direction;
+
+            if (next < -1) next = players.Count - 1;      // Q from free cam -> last
+            if (next >= players.Count) next = -1;          // E past the end -> free cam
+
+            if (next < 0)
+            {
+                Following = null;
+                MultiplayerPlugin.Log.LogInfo("[Spectator] Free camera");
+                return;
+            }
+
+            Follow(players[next]);
+        }
+
         private static bool StillInLobby(RemotePlayer rp)
         {
             var nm = NetworkManager.Instance;
@@ -382,6 +416,9 @@ namespace MHZombieMultiplayer
                 Exit();
                 return;
             }
+
+            if (Input.GetKeyDown(KeyCode.E)) CycleTarget(1);
+            if (Input.GetKeyDown(KeyCode.Q)) CycleTarget(-1);
 
             if (Following != null)
             {
@@ -438,6 +475,11 @@ namespace MHZombieMultiplayer
 
             float dt = Time.unscaledDeltaTime;
 
+            // Q/E cycle through players even from free cam - E grabs the first
+            // one, Q the last, and from there they step through the lobby
+            if (Input.GetKeyDown(KeyCode.E)) CycleTarget(1);
+            if (Input.GetKeyDown(KeyCode.Q)) CycleTarget(-1);
+
             // hold right mouse to look, so the cursor still works for the list.
             // raw mouse deltas go into a target angle and the camera eases
             // toward it - kills the frame-to-frame twitchiness.
@@ -459,8 +501,8 @@ namespace MHZombieMultiplayer
             if (Input.GetKey(KeyCode.S)) input -= _freeCam.transform.forward;
             if (Input.GetKey(KeyCode.A)) input -= _freeCam.transform.right;
             if (Input.GetKey(KeyCode.D)) input += _freeCam.transform.right;
-            if (Input.GetKey(KeyCode.E)) input += Vector3.up;
-            if (Input.GetKey(KeyCode.Q)) input -= Vector3.up;
+            if (Input.GetKey(KeyCode.Space)) input += Vector3.up;
+            if (Input.GetKey(KeyCode.C)) input -= Vector3.up;
             if (input.sqrMagnitude > 1f) input.Normalize(); // no free speed on diagonals
 
             // ease into and out of motion instead of snapping on/off
