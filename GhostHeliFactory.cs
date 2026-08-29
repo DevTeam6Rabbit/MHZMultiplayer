@@ -57,6 +57,21 @@ namespace MHZombieMultiplayer
                 body.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
             }
 
+            var solidBody = ghost.transform.Find("SolidCollision");
+            if (solidBody == null)
+            {
+                GameObject solidObj = new GameObject("SolidCollision");
+                solidObj.transform.SetParent(ghost.transform, false);
+                solidBody = solidObj.transform;
+            }
+
+            var solidCollider = solidBody.GetComponent<BoxCollider>();
+            if (solidCollider == null)
+                solidCollider = solidBody.gameObject.AddComponent<BoxCollider>();
+
+            solidCollider.isTrigger = false;
+            solidCollider.enabled = true;
+
             Renderer[] renderers = ghost.GetComponentsInChildren<Renderer>(true);
             if (renderers.Length > 0)
             {
@@ -71,6 +86,8 @@ namespace MHZombieMultiplayer
 
                 hitbox.size = new Vector3(x, y, z);
                 hitbox.center = ghost.transform.InverseTransformPoint(bounds.center);
+                solidCollider.size = new Vector3(x * 0.9f, y * 0.9f, z * 0.9f);
+                solidCollider.center = hitbox.center;
 
                 MultiplayerPlugin.Log.LogInfo($"[GhostHeliFactory] Remote hitbox size={hitbox.size} center={hitbox.center}");
             }
@@ -78,6 +95,8 @@ namespace MHZombieMultiplayer
             {
                 hitbox.size = new Vector3(4f, 2f, 5f);
                 hitbox.center = new Vector3(0f, 1f, 0f);
+                solidCollider.size = new Vector3(3.5f, 1.8f, 4.5f);
+                solidCollider.center = new Vector3(0f, 1f, 0f);
             }
         }
 

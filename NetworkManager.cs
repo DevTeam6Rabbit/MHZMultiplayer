@@ -402,11 +402,18 @@ namespace MHZombieMultiplayer
             foreach (var projectile in FindObjectsOfType<GameObject>())
             {
                 if (projectile == null) continue;
+                if (projectile.name.Contains("RemoteProjectile_")) continue;
+                if (projectile.name.Contains("RemoteHeli_")) continue;
+
                 string n = projectile.name.ToLowerInvariant();
-                if (!(n.Contains("bullet") || n.Contains("projectile") || n.Contains("rocket") || n.Contains("missile") || n.Contains("shell") || n.Contains("shot")))
+                var rb = projectile.GetComponent<Rigidbody>();
+                bool hasProjectileLikeName = n.Contains("bullet") || n.Contains("projectile") || n.Contains("rocket") || n.Contains("missile") || n.Contains("shell") || n.Contains("shot");
+                bool movingFast = rb != null && rb.velocity.magnitude > 4f;
+                bool smallDynamic = rb != null && rb.velocity.magnitude > 0.5f && projectile.transform.localScale.magnitude < 5f;
+
+                if (!hasProjectileLikeName && !movingFast && !smallDynamic)
                     continue;
 
-                var rb = projectile.GetComponent<Rigidbody>();
                 output.Add(new LocalProjectileSnapshot
                 {
                     InstanceId = projectile.GetInstanceID(),

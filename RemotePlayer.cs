@@ -19,6 +19,7 @@ namespace MHZombieMultiplayer
 
         // higher = snappier but jerkier. 15 feels right at 20 packets/sec.
         private const float InterpSpeed = 15f;
+        private const float MinHeliSeparation = 2.8f;
 
         // Name label above the heli
         private TextMesh _nameLabel;
@@ -84,6 +85,8 @@ namespace MHZombieMultiplayer
             transform.position = Vector3.Lerp(transform.position, _targetPosition, InterpSpeed * Time.deltaTime);
             transform.rotation = Quaternion.Slerp(transform.rotation, _targetRotation, InterpSpeed * Time.deltaTime);
 
+            ResolveNearbyHeliCollisions();
+
             // Keep name label facing the camera
             if (Camera.main != null)
             {
@@ -106,10 +109,17 @@ namespace MHZombieMultiplayer
                 return;
 
             string otherName = other.name ?? string.Empty;
-            if (otherName.IndexOf("Bullet", StringComparison.OrdinalIgnoreCase) >= 0 ||
+            bool projectileLike =
+                otherName.IndexOf("Bullet", StringComparison.OrdinalIgnoreCase) >= 0 ||
                 otherName.IndexOf("Projectile", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                otherName.IndexOf("Rocket", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                otherName.IndexOf("Missile", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                otherName.IndexOf("Shell", StringComparison.OrdinalIgnoreCase) >= 0 ||
                 otherName.IndexOf("Shot", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                other.attachedRigidbody != null && other.attachedRigidbody.velocity.magnitude > 8f)
+                (other.attachedRigidbody != null && other.attachedRigidbody.velocity.magnitude > 8f) ||
+                (other.GetComponent<Rigidbody>() != null && other.GetComponent<Rigidbody>().velocity.magnitude > 8f);
+
+            if (projectileLike)
             {
                 ApplyDamage(35f);
             }
@@ -122,6 +132,29 @@ namespace MHZombieMultiplayer
         private void OnCollisionEnter(Collision collision)
         {
             OnTriggerEnter(collision.collider);
+        }
+
+        private void ResolveNearbyHeliCollisions()
+        {
+            foreach (var other in FindObjectsOfType<RemotePlayer>())
+            {
+                if (other == null || other == this || other.gameObject == null || !other.gameObject.activeSelf)
+                    continue;
+
+                Vector3 delta = transform.position - other.transform.position;
+                float distance = delta.magnitude;
+                if (distance <= 0.001f)
+                {
+                    delta = new Vector3(UnityEngine.Random.value - 0.5f, 0f, UnityEngine.Random.value - 0.5f).normalized;
+                    distance = 0f;
+                }
+
+                if (distance >= MinHeliSeparation)
+                    continue;
+
+                float push = (MinHeliSeparation - distance) * 0.5f;
+                transform.position += delta.normalized * push;
+            }
         }
 
         public void ApplyDamage(float damage)
