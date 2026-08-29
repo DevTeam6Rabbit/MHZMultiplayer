@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Steamworks;
 using UnityEngine;
 
@@ -101,6 +102,9 @@ namespace MHZombieMultiplayer
                 gameObject.SetActive(active);
         }
 
+        private readonly HashSet<int> _recentProjectileHits = new HashSet<int>();
+        private readonly HashSet<int> _recentDamagePackets = new HashSet<int>();
+
         private void OnTriggerEnter(Collider other)
         {
             if (other == null || other.transform == null || other.transform.IsChildOf(transform))
@@ -109,10 +113,15 @@ namespace MHZombieMultiplayer
             if (!IsAlive)
                 return;
 
-            bool projectileLike = IsProjectileCollider(other);
-            if (projectileLike)
+            if (TryResolveProjectileHit(other, out float damage, out int projectileInstanceId))
             {
-                ApplyDamage(35f);
+                int hitKey = projectileInstanceId > 0 ? projectileInstanceId : other.GetInstanceID();
+                if (!_recentProjectileHits.Add(hitKey))
+                    return;
+
+                ApplyDamage(damage);
+                if (NetworkManager.Instance != null)
+                    NetworkManager.Instance.SendPlayerDamage(SteamId, damage, hitKey);
             }
             else if (other.bounds != null && other.bounds.size.magnitude > 1.5f)
             {
@@ -120,44 +129,31 @@ namespace MHZombieMultiplayer
             }
         }
 
-        private static bool IsProjectileCollider(Collider other)
+        private static bool TryResolveProjectileHit(Collider other, out float damage, out int projectileInstanceId)
         {
+            damage = 0f;
+            projectileInstanceId = 0;
+
             if (other == null)
                 return false;
 
             if (other.GetComponentInParent<Raulworks.RW_Base_Projectile>() != null)
-                return true;
-            if (other.GetComponentInParent<Raulworks.RW_Gat_Projectile>() != null)
-                return true;
-            if (other.GetComponentInParent<Raulworks.RW_RocketProjectile>() != null)
-                return true;
-
-            Rigidbody rb = other.attachedRigidbody != null ? other.attachedRigidbody : other.GetComponentInParent<Rigidbody>();
-            if (rb != null && rb.velocity.magnitude > 4f)
-                return true;
-
-            string otherName = other.name ?? string.Empty;
-            if (otherName.IndexOf("Bullet", StringComparison.OrdinalIgnoreCase) >= 0)
-                return true;
-            if (otherName.IndexOf("Projectile", StringComparison.OrdinalIgnoreCase) >= 0)
-                return true;
-            if (otherName.IndexOf("Rocket", StringComparison.OrdinalIgnoreCase) >= 0)
-                return true;
-            if (otherName.IndexOf("Missile", StringComparison.OrdinalIgnoreCase) >= 0)
-                return true;
-            if (otherName.IndexOf("Shell", StringComparison.OrdinalIgnoreCase) >= 0)
-                return true;
-            if (otherName.IndexOf("Shot", StringComparison.OrdinalIgnoreCase) >= 0)
-                return true;
-
-            Transform t = other.transform;
-            while (t != null)
             {
-                if (t.name.IndexOf("Proj", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                    t.name.IndexOf("Bullet", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                    t.name.IndexOf("Rocket", StringComparison.OrdinalIgnoreCase) >= 0)
-                    return true;
-                t = t.parent;
+                damage = 35f;
+                projectileInstanceId = other.GetComponentInParent<Raulworks.RW_Base_Projectile>().GetInstanceID();
+                return true;
+            }
+            if (other.GetComponentInParent<Raulworks.RW_Gat_Projectile>() != null)
+            {
+                damage = 35f;
+                projectileInstanceId = other.GetComponentInParent<Raulworks.RW_Gat_Projectile>().GetInstanceID();
+                return true;
+            }
+            if (other.GetComponentInParent<Raulworks.RW_RocketProjectile>() != null)
+            {
+                damage = 45f;
+                projectileInstanceId = other.GetComponentInParent<Raulworks.RW_RocketProjectile>().GetInstanceID();
+                return true;
             }
 
             return false;

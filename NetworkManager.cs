@@ -286,6 +286,9 @@ namespace MHZombieMultiplayer
                     case PacketType.ProjectileState:
                         HandleProjectileState(PacketSerializer.DeserializeProjectileState(data), sender);
                         break;
+                    case PacketType.PlayerDamage:
+                        HandlePlayerDamage(PacketSerializer.DeserializePlayerDamage(data), sender);
+                        break;
                 }
             }
         }
@@ -321,6 +324,39 @@ namespace MHZombieMultiplayer
         {
             string name = SteamFriends.GetFriendPersonaName(new CSteamID(packet.SteamId));
             ScoreboardManager.ReportRemoteFinish(name, packet.TimeSeconds);
+        }
+
+        private void HandlePlayerDamage(PlayerDamagePacket packet, CSteamID sender)
+        {
+            CSteamID victim = new CSteamID(packet.TargetSteamId);
+            if (RemotePlayers.TryGetValue(victim, out RemotePlayer remote))
+            {
+                remote.ApplyDamage(packet.Damage);
+                MultiplayerPlugin.Log.LogInfo($"[NetworkManager] {SteamFriends.GetFriendPersonaName(sender)} hit {SteamFriends.GetFriendPersonaName(victim)} for {packet.Damage} damage");
+            }
+        }
+
+        public void SendPlayerDamage(CSteamID target, float damage, int projectileInstanceId)
+        {
+            if (!IsConnected) return;
+
+            var packet = new PlayerDamagePacket
+            {
+                PacketType = PacketType.PlayerDamage,
+                TargetSteamId = target.m_SteamID,
+                AttackerSteamId = SteamUser.GetSteamID().m_SteamID,
+                Damage = damage,
+                ProjectileInstanceId = projectileInstanceId,
+            };
+
+            byte[] data = PacketSerializer.Serialize(packet);
+            int count = SteamMatchmaking.GetNumLobbyMembers(LobbyId);
+            for (int i = 0; i < count; i++)
+            {
+                CSteamID member = SteamMatchmaking.GetLobbyMemberByIndex(LobbyId, i);
+                if (member != SteamUser.GetSteamID())
+                    SteamNetworking.SendP2PPacket(member, data, (uint)data.Length, EP2PSend.k_EP2PSendReliable, Channel);
+            }
         }
 
         // ─── Remote player management ─────────────────────────────────────────
@@ -419,11 +455,11 @@ namespace MHZombieMultiplayer
 
             foreach (var projectile in FindObjectsOfType<Raulworks.RW_Base_Projectile>())
             {
-                if (projectile == null || projectile.gameObject == null)
+                if (projectile == null || projectile.gameObject == null || !projectile.gameObject.activeInHierarchy)
                     continue;
 
                 GameObject go = projectile.gameObject;
-                if (go.name.Contains("RemoteProjectile_"))
+                if (go.name.Contains("RemoteProjectile_") || go.name.Contains("RemoteHeli_"))
                     continue;
 
                 var rb = go.GetComponent<Rigidbody>();
@@ -433,35 +469,50 @@ namespace MHZombieMultiplayer
                     Position = go.transform.position,
                     Rotation = go.transform.rotation,
                     Velocity = rb != null ? rb.velocity : Vector3.zero,
-                    LifeSeconds = projectile.timeoutTime > 0f ? projectile.timeoutTime : 1f,
+                    LifeSeconds = Mathf.Max(0.1f, projectile.timeoutTime > 0f ? projectile.timeoutTime : 1f),
                 });
             }
 
-            foreach (var projectile in FindObjectsOfType<GameObject>())
+            foreach (var projectile in FindObjectsOfType<Raulworks.RW_Gat_Projectile>())
             {
-                if (projectile == null) continue;
-                if (projectile.GetComponent<Raulworks.RW_Base_Projectile>() != null) continue;
-                if (projectile.name.Contains("RemoteProjectile_")) continue;
-                if (projectile.name.Contains("RemoteHeli_")) continue;
-
-                string n = projectile.name.ToLowerInvariant();
-                var rb = projectile.GetComponent<Rigidbody>();
-                bool hasProjectileLikeName = n.Contains("bullet") || n.Contains("projectile") || n.Contains("rocket") || n.Contains("missile") || n.Contains("shell") || n.Contains("shot");
-                bool movingFast = rb != null && rb.velocity.magnitude > 4f;
-                bool smallDynamic = rb != null && rb.velocity.magnitude > 0.5f && projectile.transform.localScale.magnitude < 5f;
-
-                if (!hasProjectileLikeName && !movingFast && !smallDynamic)
+                if (projectile == null || projectile.gameObject == null || !projectile.gameObject.activeInHierarchy)
                     continue;
 
+                GameObject go = projectile.gameObject;
+                if (go.name.Contains("RemoteProjectile_") || go.name.Contains("RemoteHeli_"))
+                    continue;
+
+                var rb = go.GetComponent<Rigidbody>();
                 output.Add(new LocalProjectileSnapshot
                 {
-                    InstanceId = projectile.GetInstanceID(),
-                    Position = projectile.transform.position,
-                    Rotation = projectile.transform.rotation,
+                    InstanceId = go.GetInstanceID(),
+                    Position = go.transform.position,
+                    Rotation = go.transform.rotation,
                     Velocity = rb != null ? rb.velocity : Vector3.zero,
                     LifeSeconds = 1f,
                 });
             }
+
+            foreach (var projectile in FindObjectsOfType<Raulworks.RW_RocketProjectile>())
+            {
+                if (projectile == null || projectile.gameObject == null || !projectile.gameObject.activeInHierarchy)
+                    continue;
+
+                GameObject go = projectile.gameObject;
+                if (go.name.Contains("RemoteProjectile_") || go.name.Contains("RemoteHeli_"))
+                    continue;
+
+                var rb = go.GetComponent<Rigidbody>();
+                output.Add(new LocalProjectileSnapshot
+                {
+                    InstanceId = go.GetInstanceID(),
+                    Position = go.transform.position,
+                    Rotation = go.transform.rotation,
+                    Velocity = rb != null ? rb.velocity : Vector3.zero,
+                    LifeSeconds = 1.5f,
+                });
+            }
+
             return output;
         }
 
@@ -547,5 +598,7 @@ namespace MHZombieMultiplayer
         public Quaternion Rotation;
         public Vector3 Velocity;
         public float LifeSeconds;
+        public ProjectileKind Kind;
+        public float Damage;
     }
 }

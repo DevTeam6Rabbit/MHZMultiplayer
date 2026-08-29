@@ -10,6 +10,7 @@ namespace MHZombieMultiplayer
         Chat            = 2,
         RaceFinish      = 3,
         ProjectileState = 4,
+        PlayerDamage    = 5,
     }
 
     public struct HeliStatePacket
@@ -44,6 +45,15 @@ namespace MHZombieMultiplayer
         public PacketType PacketType;
         public ulong SteamId;
         public float TimeSeconds;
+    }
+
+    public struct PlayerDamagePacket
+    {
+        public PacketType PacketType;
+        public ulong TargetSteamId;
+        public ulong AttackerSteamId;
+        public float Damage;
+        public int ProjectileInstanceId;
     }
 
     public static class PacketSerializer
@@ -139,6 +149,38 @@ namespace MHZombieMultiplayer
                     PacketType  = (PacketType)r.ReadByte(),
                     SteamId     = r.ReadUInt64(),
                     TimeSeconds = r.ReadSingle(),
+                };
+            }
+        }
+
+        // ── PlayerDamage ───────────────────────────────────────────────────────
+
+        public static byte[] Serialize(PlayerDamagePacket p)
+        {
+            using (var ms = new MemoryStream())
+            using (var w = new BinaryWriter(ms))
+            {
+                w.Write((byte)p.PacketType);
+                w.Write(p.TargetSteamId);
+                w.Write(p.AttackerSteamId);
+                w.Write(p.Damage);
+                w.Write(p.ProjectileInstanceId);
+                return ms.ToArray();
+            }
+        }
+
+        public static PlayerDamagePacket DeserializePlayerDamage(byte[] data)
+        {
+            using (var ms = new MemoryStream(data))
+            using (var r = new BinaryReader(ms))
+            {
+                return new PlayerDamagePacket
+                {
+                    PacketType = (PacketType)r.ReadByte(),
+                    TargetSteamId = r.ReadUInt64(),
+                    AttackerSteamId = r.ReadUInt64(),
+                    Damage = r.ReadSingle(),
+                    ProjectileInstanceId = r.ReadInt32(),
                 };
             }
         }

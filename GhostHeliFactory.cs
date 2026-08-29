@@ -74,9 +74,12 @@ namespace MHZombieMultiplayer
             // The trigger hitbox remains enabled for PvP damage detection.
             solidCollider.isTrigger = false;
             solidCollider.enabled = false;
-            var solidBodyRb = ghost.GetComponent<Rigidbody>();
-            if (solidBodyRb != null)
-                solidBodyRb.detectCollisions = false;
+
+            // Keep detectCollisions enabled so the trigger hitbox receives OnTriggerEnter
+            // from local weapon projectiles. SolidCollision is already disabled above.
+            var hitboxRb = ghost.GetComponent<Rigidbody>();
+            if (hitboxRb != null)
+                hitboxRb.detectCollisions = true;
 
             Renderer[] renderers = ghost.GetComponentsInChildren<Renderer>(true);
             if (renderers.Length > 0)
