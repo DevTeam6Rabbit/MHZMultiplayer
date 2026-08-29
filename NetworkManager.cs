@@ -342,11 +342,28 @@ namespace MHZombieMultiplayer
         {
             GameObject go = GameObject.CreatePrimitive(PrimitiveType.Sphere);
             go.name = $"RemoteProjectile_{sender.m_SteamID}_{packet.InstanceId}";
-            UnityEngine.Object.Destroy(go.GetComponent<Collider>());
+
+            var col = go.GetComponent<Collider>();
+            if (col != null)
+            {
+                col.isTrigger = true;
+                if (col is SphereCollider sphere)
+                    sphere.radius = 0.5f;
+            }
+
+            var rb = go.GetComponent<Rigidbody>();
+            if (rb == null)
+            {
+                rb = go.AddComponent<Rigidbody>();
+                rb.useGravity = false;
+                rb.isKinematic = true;
+                rb.detectCollisions = false;
+            }
+
             Renderer r = go.GetComponent<Renderer>();
             if (r != null)
                 r.material.color = new Color(1f, 0.65f, 0f);
-            go.transform.localScale = new Vector3(0.3f, 0.3f, 0.3f);
+            go.transform.localScale = new Vector3(0.35f, 0.35f, 0.35f);
             go.transform.position = packet.Position;
             go.transform.rotation = packet.Rotation;
             UnityEngine.Object.DontDestroyOnLoad(go);
@@ -370,7 +387,7 @@ namespace MHZombieMultiplayer
 
         private void BroadcastProjectileState()
         {
-            if (!IsConnected || !IsHost) return;
+            if (!IsConnected) return;
 
             foreach (var projectile in FindLocalProjectiles())
             {

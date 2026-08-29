@@ -109,27 +109,58 @@ namespace MHZombieMultiplayer
             if (!IsAlive)
                 return;
 
-            string otherName = other.name ?? string.Empty;
-            bool projectileLike =
-                other.GetComponentInParent<Raulworks.RW_Base_Projectile>() != null ||
-                other.GetComponentInParent<Raulworks.RW_Gat_Projectile>() != null ||
-                other.GetComponentInParent<Raulworks.RW_RocketProjectile>() != null ||
-                other.GetComponentInParent<Rigidbody>() != null && other.GetComponentInParent<Rigidbody>().velocity.magnitude > 8f ||
-                otherName.IndexOf("Bullet", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                otherName.IndexOf("Projectile", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                otherName.IndexOf("Rocket", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                otherName.IndexOf("Missile", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                otherName.IndexOf("Shell", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                otherName.IndexOf("Shot", StringComparison.OrdinalIgnoreCase) >= 0;
-
+            bool projectileLike = IsProjectileCollider(other);
             if (projectileLike)
             {
                 ApplyDamage(35f);
             }
-            else if (other.bounds.size.magnitude > 1.5f)
+            else if (other.bounds != null && other.bounds.size.magnitude > 1.5f)
             {
                 ApplyDamage(10f);
             }
+        }
+
+        private static bool IsProjectileCollider(Collider other)
+        {
+            if (other == null)
+                return false;
+
+            if (other.GetComponentInParent<Raulworks.RW_Base_Projectile>() != null)
+                return true;
+            if (other.GetComponentInParent<Raulworks.RW_Gat_Projectile>() != null)
+                return true;
+            if (other.GetComponentInParent<Raulworks.RW_RocketProjectile>() != null)
+                return true;
+
+            Rigidbody rb = other.attachedRigidbody != null ? other.attachedRigidbody : other.GetComponentInParent<Rigidbody>();
+            if (rb != null && rb.velocity.magnitude > 4f)
+                return true;
+
+            string otherName = other.name ?? string.Empty;
+            if (otherName.IndexOf("Bullet", StringComparison.OrdinalIgnoreCase) >= 0)
+                return true;
+            if (otherName.IndexOf("Projectile", StringComparison.OrdinalIgnoreCase) >= 0)
+                return true;
+            if (otherName.IndexOf("Rocket", StringComparison.OrdinalIgnoreCase) >= 0)
+                return true;
+            if (otherName.IndexOf("Missile", StringComparison.OrdinalIgnoreCase) >= 0)
+                return true;
+            if (otherName.IndexOf("Shell", StringComparison.OrdinalIgnoreCase) >= 0)
+                return true;
+            if (otherName.IndexOf("Shot", StringComparison.OrdinalIgnoreCase) >= 0)
+                return true;
+
+            Transform t = other.transform;
+            while (t != null)
+            {
+                if (t.name.IndexOf("Proj", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    t.name.IndexOf("Bullet", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    t.name.IndexOf("Rocket", StringComparison.OrdinalIgnoreCase) >= 0)
+                    return true;
+                t = t.parent;
+            }
+
+            return false;
         }
 
         private void OnCollisionEnter(Collision collision)
