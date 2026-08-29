@@ -1,3 +1,4 @@
+using System;
 using Steamworks;
 using UnityEngine;
 
@@ -7,6 +8,9 @@ namespace MHZombieMultiplayer
     {
         public CSteamID SteamId;
         public string DisplayName;
+
+        public float Health = 100f;
+        public bool IsAlive => Health > 0f;
 
         // Interpolation targets
         private Vector3 _targetPosition;
@@ -46,6 +50,13 @@ namespace MHZombieMultiplayer
 
             // If the factory managed a real copy at spawn, there's no placeholder
             _visualsBuilt = transform.Find("PlaceholderBox") == null;
+
+            if (GetComponent<BoxCollider>() != null)
+            {
+                var cc = GetComponent<BoxCollider>();
+                cc.isTrigger = true;
+                cc.size = new Vector3(Mathf.Max(cc.size.x, 2f), Mathf.Max(cc.size.y, 1.5f), Mathf.Max(cc.size.z, 2.5f));
+            }
         }
 
         private void Update()
@@ -60,6 +71,7 @@ namespace MHZombieMultiplayer
                     _visualsBuilt = true;
                     Transform box = transform.Find("PlaceholderBox");
                     if (box != null) Destroy(box.gameObject);
+                    GhostHeliFactory.EnsurePvPHitbox(gameObject);
                     MultiplayerPlugin.Log.LogInfo($"[RemotePlayer] Upgraded {DisplayName}'s placeholder to the real heli model");
                 }
             }
@@ -79,6 +91,49 @@ namespace MHZombieMultiplayer
             bool active = (Time.time - _lastUpdateTime) < TimeoutSeconds;
             if (gameObject.activeSelf != active)
                 gameObject.SetActive(active);
+        }
+
+        private void OnTriggerEnter(Collider other)
+        {
+            if (other == null || other.transform == null || other.transform.IsChildOf(transform))
+                return;
+
+            if (!IsAlive)
+                return;
+
+            string otherName = other.name ?? string.Empty;
+            if (otherName.IndexOf("Bullet", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                otherName.IndexOf("Projectile", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                otherName.IndexOf("Shot", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                other.attachedRigidbody != null && other.attachedRigidbody.velocity.magnitude > 8f)
+            {
+                ApplyDamage(35f);
+            }
+            else if (other.bounds.size.magnitude > 1.5f)
+            {
+                ApplyDamage(10f);
+            }
+        }
+
+        private void OnCollisionEnter(Collision collision)
+        {
+            OnTriggerEnter(collision.collider);
+        }
+
+        public void ApplyDamage(float damage)
+        {
+            if (damage <= 0f || !IsAlive)
+                return;
+
+            Health = Mathf.Max(0f, Health - damage);
+            MultiplayerPlugin.Log.LogInfo($"[RemotePlayer] {DisplayName} took {damage} damage. Health={Health}");
+
+            if (Health <= 0f)
+            {
+                if (gameObject.activeSelf)
+                    gameObject.SetActive(false);
+                MultiplayerPlugin.Log.LogInfo($"[RemotePlayer] {DisplayName} was eliminated.");
+            }
         }
 
         public void ApplyState(HeliStatePacket packet)
