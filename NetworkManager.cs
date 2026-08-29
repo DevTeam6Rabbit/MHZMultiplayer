@@ -29,6 +29,9 @@ namespace MHZombieMultiplayer
         public Dictionary<CSteamID, RemotePlayer> RemotePlayers { get; private set; }
             = new Dictionary<CSteamID, RemotePlayer>();
 
+        private readonly Dictionary<string, RemoteProjectile> _remoteProjectiles = new Dictionary<string, RemoteProjectile>();
+        private readonly Dictionary<int, ProjectileStateSnapshot> _knownProjectiles = new Dictionary<int, ProjectileStateSnapshot>();
+
         // 20/sec is plenty, the lerp on the receiving side smooths the rest.
         // careful raising it - everyone sends to everyone, so it's n^2.
         private const float SendRate = 0.05f; // 20 times/sec
@@ -73,6 +76,7 @@ namespace MHZombieMultiplayer
             {
                 _sendTimer = SendRate;
                 BroadcastHeliState();
+                BroadcastProjectileState();
             }
 
             // Read incoming packets every frame
@@ -279,6 +283,9 @@ namespace MHZombieMultiplayer
                     case PacketType.RaceFinish:
                         HandleRaceFinish(PacketSerializer.DeserializeRaceFinish(data));
                         break;
+                    case PacketType.ProjectileState:
+                        HandleProjectileState(PacketSerializer.DeserializeProjectileState(data), sender);
+                        break;
                 }
             }
         }
@@ -287,6 +294,20 @@ namespace MHZombieMultiplayer
         {
             if (RemotePlayers.TryGetValue(sender, out RemotePlayer remote))
                 remote.ApplyState(packet);
+        }
+
+        private void HandleProjectileState(ProjectileStatePacket packet, CSteamID sender)
+        {
+            string key = sender.m_SteamID + ":" + packet.InstanceId;
+            if (!_remoteProjectiles.TryGetValue(key, out RemoteProjectile projectile))
+            {
+                projectile = SpawnRemoteProjectile(sender, packet);
+                if (projectile != null)
+                    _remoteProjectiles[key] = projectile;
+            }
+
+            if (projectile != null)
+                projectile.ApplyState(packet);
         }
 
         private void HandleChat(ChatPacket packet)
@@ -317,6 +338,26 @@ namespace MHZombieMultiplayer
             MultiplayerPlugin.Log.LogInfo($"Spawned ghost heli for {rp.DisplayName}");
         }
 
+        private RemoteProjectile SpawnRemoteProjectile(CSteamID sender, ProjectileStatePacket packet)
+        {
+            GameObject go = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            go.name = $"RemoteProjectile_{sender.m_SteamID}_{packet.InstanceId}";
+            UnityEngine.Object.Destroy(go.GetComponent<Collider>());
+            Renderer r = go.GetComponent<Renderer>();
+            if (r != null)
+                r.material.color = new Color(1f, 0.65f, 0f);
+            go.transform.localScale = new Vector3(0.3f, 0.3f, 0.3f);
+            go.transform.position = packet.Position;
+            go.transform.rotation = packet.Rotation;
+            UnityEngine.Object.DontDestroyOnLoad(go);
+
+            RemoteProjectile projectile = go.AddComponent<RemoteProjectile>();
+            projectile.SteamId = sender.m_SteamID;
+            projectile.InstanceId = packet.InstanceId;
+            projectile.ApplyState(packet);
+            return projectile;
+        }
+
         private void RemoveRemotePlayer(CSteamID steamId)
         {
             if (RemotePlayers.TryGetValue(steamId, out RemotePlayer rp))
@@ -325,6 +366,57 @@ namespace MHZombieMultiplayer
                     Destroy(rp.gameObject);
                 RemotePlayers.Remove(steamId);
             }
+        }
+
+        private void BroadcastProjectileState()
+        {
+            if (!IsConnected || !IsHost) return;
+
+            foreach (var projectile in FindLocalProjectiles())
+            {
+                var state = new ProjectileStatePacket
+                {
+                    PacketType = PacketType.ProjectileState,
+                    SteamId = SteamUser.GetSteamID().m_SteamID,
+                    InstanceId = projectile.InstanceId,
+                    Position = projectile.Position,
+                    Rotation = projectile.Rotation,
+                    Velocity = projectile.Velocity,
+                    LifeSeconds = projectile.LifeSeconds,
+                };
+
+                byte[] data = PacketSerializer.Serialize(state);
+                int count = SteamMatchmaking.GetNumLobbyMembers(LobbyId);
+                for (int i = 0; i < count; i++)
+                {
+                    CSteamID member = SteamMatchmaking.GetLobbyMemberByIndex(LobbyId, i);
+                    if (member != SteamUser.GetSteamID())
+                        SteamNetworking.SendP2PPacket(member, data, (uint)data.Length, EP2PSend.k_EP2PSendUnreliable, Channel);
+                }
+            }
+        }
+
+        private System.Collections.Generic.List<LocalProjectileSnapshot> FindLocalProjectiles()
+        {
+            var output = new System.Collections.Generic.List<LocalProjectileSnapshot>();
+            foreach (var projectile in FindObjectsOfType<GameObject>())
+            {
+                if (projectile == null) continue;
+                string n = projectile.name.ToLowerInvariant();
+                if (!(n.Contains("bullet") || n.Contains("projectile") || n.Contains("rocket") || n.Contains("missile") || n.Contains("shell") || n.Contains("shot")))
+                    continue;
+
+                var rb = projectile.GetComponent<Rigidbody>();
+                output.Add(new LocalProjectileSnapshot
+                {
+                    InstanceId = projectile.GetInstanceID(),
+                    Position = projectile.transform.position,
+                    Rotation = projectile.transform.rotation,
+                    Velocity = rb != null ? rb.velocity : Vector3.zero,
+                    LifeSeconds = 1f,
+                });
+            }
+            return output;
         }
 
         public void LeaveLobby()
@@ -340,5 +432,74 @@ namespace MHZombieMultiplayer
             IsHost = false;
             LobbyId = default;
         }
+    }
+
+    public class RemoteProjectile : MonoBehaviour
+    {
+        public ulong SteamId;
+        public int InstanceId;
+
+        private Vector3 _targetPosition;
+        private Quaternion _targetRotation;
+        private Vector3 _velocity;
+        private float _lifeSeconds;
+
+        public Vector3 Position => transform.position;
+        public Quaternion Rotation => transform.rotation;
+        public Vector3 Velocity => _velocity;
+        public float LifeSeconds => _lifeSeconds;
+
+        private void Start()
+        {
+            _targetPosition = transform.position;
+            _targetRotation = transform.rotation;
+            _lifeSeconds = 1f;
+        }
+
+        private void Update()
+        {
+            if (_lifeSeconds <= 0f)
+            {
+                if (gameObject != null)
+                    Destroy(gameObject);
+                return;
+            }
+
+            _lifeSeconds -= Time.deltaTime;
+            transform.position = Vector3.Lerp(transform.position, _targetPosition, 20f * Time.deltaTime);
+            transform.rotation = Quaternion.Slerp(transform.rotation, _targetRotation, 20f * Time.deltaTime);
+
+            if (_lifeSeconds <= 0f && gameObject != null)
+                Destroy(gameObject);
+        }
+
+        public void ApplyState(ProjectileStatePacket packet)
+        {
+            _targetPosition = packet.Position;
+            _targetRotation = packet.Rotation;
+            _velocity = packet.Velocity;
+            _lifeSeconds = packet.LifeSeconds;
+
+            if (gameObject != null)
+                gameObject.SetActive(true);
+        }
+    }
+
+    public struct ProjectileStateSnapshot
+    {
+        public int InstanceId;
+        public Vector3 Position;
+        public Quaternion Rotation;
+        public Vector3 Velocity;
+        public float LifeSeconds;
+    }
+
+    public struct LocalProjectileSnapshot
+    {
+        public int InstanceId;
+        public Vector3 Position;
+        public Quaternion Rotation;
+        public Vector3 Velocity;
+        public float LifeSeconds;
     }
 }

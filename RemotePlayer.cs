@@ -38,15 +38,19 @@ namespace MHZombieMultiplayer
 
             // Create floating name label
             GameObject labelObj = new GameObject("NameLabel");
-            labelObj.transform.SetParent(transform);
-            labelObj.transform.localPosition = new Vector3(0, 3f, 0);
+            labelObj.transform.SetParent(transform, false);
+            labelObj.transform.localPosition = new Vector3(0f, 3.5f, 0f);
             _nameLabel = labelObj.AddComponent<TextMesh>();
             _nameLabel.text = DisplayName ?? "Player";
-            _nameLabel.fontSize = 24;
+            _nameLabel.fontSize = 28;
+            _nameLabel.characterSize = 0.18f;
             _nameLabel.alignment = TextAlignment.Center;
             _nameLabel.anchor = TextAnchor.LowerCenter;
             _nameLabel.color = Color.cyan;
-            labelObj.transform.localScale = Vector3.one * 0.1f;
+            _nameLabel.fontStyle = FontStyle.Bold;
+            _nameLabel.offsetZ = 0.05f;
+            labelObj.transform.localScale = Vector3.one * 0.18f;
+            labelObj.GetComponent<Renderer>().material = new Material(Shader.Find("GUI/Text Shader"));
 
             // If the factory managed a real copy at spawn, there's no placeholder
             _visualsBuilt = transform.Find("PlaceholderBox") == null;

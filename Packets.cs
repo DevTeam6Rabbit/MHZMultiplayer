@@ -6,9 +6,10 @@ namespace MHZombieMultiplayer
 {
     public enum PacketType : byte
     {
-        HeliState  = 1,
-        Chat       = 2,
-        RaceFinish = 3,
+        HeliState       = 1,
+        Chat            = 2,
+        RaceFinish      = 3,
+        ProjectileState = 4,
     }
 
     public struct HeliStatePacket
@@ -18,6 +19,17 @@ namespace MHZombieMultiplayer
         public Vector3 Position;
         public Quaternion Rotation;
         public Vector3 Velocity;
+    }
+
+    public struct ProjectileStatePacket
+    {
+        public PacketType PacketType;
+        public ulong SteamId;
+        public int InstanceId;
+        public Vector3 Position;
+        public Quaternion Rotation;
+        public Vector3 Velocity;
+        public float LifeSeconds;
     }
 
     public struct ChatPacket
@@ -127,6 +139,42 @@ namespace MHZombieMultiplayer
                     PacketType  = (PacketType)r.ReadByte(),
                     SteamId     = r.ReadUInt64(),
                     TimeSeconds = r.ReadSingle(),
+                };
+            }
+        }
+
+        // ── ProjectileState ───────────────────────────────────────────────────
+
+        public static byte[] Serialize(ProjectileStatePacket p)
+        {
+            using (var ms = new MemoryStream(1 + 8 + 4 + 12 + 16 + 12 + 4))
+            using (var w = new BinaryWriter(ms))
+            {
+                w.Write((byte)p.PacketType);
+                w.Write(p.SteamId);
+                w.Write(p.InstanceId);
+                WriteVec3(w, p.Position);
+                WriteQuat(w, p.Rotation);
+                WriteVec3(w, p.Velocity);
+                w.Write(p.LifeSeconds);
+                return ms.ToArray();
+            }
+        }
+
+        public static ProjectileStatePacket DeserializeProjectileState(byte[] data)
+        {
+            using (var ms = new MemoryStream(data))
+            using (var r = new BinaryReader(ms))
+            {
+                return new ProjectileStatePacket
+                {
+                    PacketType = (PacketType)r.ReadByte(),
+                    SteamId = r.ReadUInt64(),
+                    InstanceId = r.ReadInt32(),
+                    Position = ReadVec3(r),
+                    Rotation = ReadQuat(r),
+                    Velocity = ReadVec3(r),
+                    LifeSeconds = r.ReadSingle(),
                 };
             }
         }
