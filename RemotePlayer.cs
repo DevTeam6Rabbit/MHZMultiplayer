@@ -110,14 +110,16 @@ namespace MHZombieMultiplayer
 
             string otherName = other.name ?? string.Empty;
             bool projectileLike =
+                other.GetComponentInParent<Raulworks.RW_Base_Projectile>() != null ||
+                other.GetComponentInParent<Raulworks.RW_Gat_Projectile>() != null ||
+                other.GetComponentInParent<Raulworks.RW_RocketProjectile>() != null ||
+                other.GetComponentInParent<Rigidbody>() != null && other.GetComponentInParent<Rigidbody>().velocity.magnitude > 8f ||
                 otherName.IndexOf("Bullet", StringComparison.OrdinalIgnoreCase) >= 0 ||
                 otherName.IndexOf("Projectile", StringComparison.OrdinalIgnoreCase) >= 0 ||
                 otherName.IndexOf("Rocket", StringComparison.OrdinalIgnoreCase) >= 0 ||
                 otherName.IndexOf("Missile", StringComparison.OrdinalIgnoreCase) >= 0 ||
                 otherName.IndexOf("Shell", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                otherName.IndexOf("Shot", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                (other.attachedRigidbody != null && other.attachedRigidbody.velocity.magnitude > 8f) ||
-                (other.GetComponent<Rigidbody>() != null && other.GetComponent<Rigidbody>().velocity.magnitude > 8f);
+                otherName.IndexOf("Shot", StringComparison.OrdinalIgnoreCase) >= 0;
 
             if (projectileLike)
             {

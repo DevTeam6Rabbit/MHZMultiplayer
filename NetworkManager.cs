@@ -399,9 +399,31 @@ namespace MHZombieMultiplayer
         private System.Collections.Generic.List<LocalProjectileSnapshot> FindLocalProjectiles()
         {
             var output = new System.Collections.Generic.List<LocalProjectileSnapshot>();
+
+            foreach (var projectile in FindObjectsOfType<Raulworks.RW_Base_Projectile>())
+            {
+                if (projectile == null || projectile.gameObject == null)
+                    continue;
+
+                GameObject go = projectile.gameObject;
+                if (go.name.Contains("RemoteProjectile_"))
+                    continue;
+
+                var rb = go.GetComponent<Rigidbody>();
+                output.Add(new LocalProjectileSnapshot
+                {
+                    InstanceId = go.GetInstanceID(),
+                    Position = go.transform.position,
+                    Rotation = go.transform.rotation,
+                    Velocity = rb != null ? rb.velocity : Vector3.zero,
+                    LifeSeconds = projectile.timeoutTime > 0f ? projectile.timeoutTime : 1f,
+                });
+            }
+
             foreach (var projectile in FindObjectsOfType<GameObject>())
             {
                 if (projectile == null) continue;
+                if (projectile.GetComponent<Raulworks.RW_Base_Projectile>() != null) continue;
                 if (projectile.name.Contains("RemoteProjectile_")) continue;
                 if (projectile.name.Contains("RemoteHeli_")) continue;
 

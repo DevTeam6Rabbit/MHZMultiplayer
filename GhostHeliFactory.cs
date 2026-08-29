@@ -69,8 +69,14 @@ namespace MHZombieMultiplayer
             if (solidCollider == null)
                 solidCollider = solidBody.gameObject.AddComponent<BoxCollider>();
 
+            // Keep the solid collision component around, but disable it so remote helis
+            // do not push each other out of the spawn point or crash into a wall.
+            // The trigger hitbox remains enabled for PvP damage detection.
             solidCollider.isTrigger = false;
-            solidCollider.enabled = true;
+            solidCollider.enabled = false;
+            var solidBodyRb = ghost.GetComponent<Rigidbody>();
+            if (solidBodyRb != null)
+                solidBodyRb.detectCollisions = false;
 
             Renderer[] renderers = ghost.GetComponentsInChildren<Renderer>(true);
             if (renderers.Length > 0)
