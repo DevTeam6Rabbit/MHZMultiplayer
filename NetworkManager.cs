@@ -376,33 +376,19 @@ namespace MHZombieMultiplayer
 
         private RemoteProjectile SpawnRemoteProjectile(CSteamID sender, ProjectileStatePacket packet)
         {
-            GameObject go = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-            go.name = $"RemoteProjectile_{sender.m_SteamID}_{packet.InstanceId}";
-
-            var col = go.GetComponent<Collider>();
-            if (col != null)
-            {
-                col.isTrigger = true;
-                if (col is SphereCollider sphere)
-                    sphere.radius = 0.5f;
-            }
-
-            var rb = go.GetComponent<Rigidbody>();
-            if (rb == null)
-            {
-                rb = go.AddComponent<Rigidbody>();
-                rb.useGravity = false;
-                rb.isKinematic = true;
-                rb.detectCollisions = false;
-            }
-
-            Renderer r = go.GetComponent<Renderer>();
-            if (r != null)
-                r.material.color = new Color(1f, 0.65f, 0f);
-            go.transform.localScale = new Vector3(0.35f, 0.35f, 0.35f);
+            GameObject go = new GameObject($"RemoteProjectile_{sender.m_SteamID}_{packet.InstanceId}");
             go.transform.position = packet.Position;
             go.transform.rotation = packet.Rotation;
             UnityEngine.Object.DontDestroyOnLoad(go);
+
+            var rb = go.AddComponent<Rigidbody>();
+            rb.useGravity = false;
+            rb.isKinematic = true;
+            rb.detectCollisions = false;
+
+            var col = go.AddComponent<SphereCollider>();
+            col.isTrigger = true;
+            col.radius = 0.4f;
 
             RemoteProjectile projectile = go.AddComponent<RemoteProjectile>();
             projectile.SteamId = sender.m_SteamID;
