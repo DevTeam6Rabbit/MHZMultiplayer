@@ -72,6 +72,11 @@
       <HintPath>$(GameDir)\MHZ_Data\Managed\UnityEngine.InputLegacyModule.dll</HintPath>
       <Private>false</Private>
     </Reference>
+    <!-- Legacy WWW used by LeaderboardPublisher -->
+    <Reference Include="UnityEngine.UnityWebRequestWWWModule">
+      <HintPath>$(GameDir)\MHZ_Data\Managed\UnityEngine.UnityWebRequestWWWModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
     <Reference Include="Assembly-CSharp">
       <HintPath>$(GameDir)\MHZ_Data\Managed\Assembly-CSharp.dll</HintPath>
       <Private>false</Private>
