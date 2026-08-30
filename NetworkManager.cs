@@ -30,6 +30,8 @@ namespace MHZombieMultiplayer
             = new Dictionary<CSteamID, RemotePlayer>();
 
         private readonly Dictionary<string, RemoteProjectile> _remoteProjectiles = new Dictionary<string, RemoteProjectile>();
+        private readonly HashSet<ProjectileKind> _loggedSentProjectileKinds = new HashSet<ProjectileKind>();
+        private readonly HashSet<ProjectileKind> _loggedReceivedProjectileKinds = new HashSet<ProjectileKind>();
 
         // 20/sec is plenty, the lerp on the receiving side smooths the rest.
         // careful raising it - everyone sends to everyone, so it's n^2.
@@ -325,9 +327,17 @@ namespace MHZombieMultiplayer
 
         private void HandleProjectileState(ProjectileStatePacket packet, CSteamID sender)
         {
-            if (packet.SteamId != sender.m_SteamID || packet.Damage <= 0f || packet.Damage > 100f ||
+            if (packet.SteamId != sender.m_SteamID ||
                 packet.Kind < ProjectileKind.Base || packet.Kind > ProjectileKind.Rocket)
                 return;
+
+            // Damage is determined locally from the ammo kind. Do not trust a
+            // game's serialized damage field or a peer-provided override.
+            packet.Damage = ProjectileHelper.GetDamageForKind(packet.Kind);
+            if (packet.Damage <= 0f)
+                return;
+            if (_loggedReceivedProjectileKinds.Add(packet.Kind))
+                MultiplayerPlugin.Log.LogInfo($"[Projectile] First received {packet.Kind} shot: damage={packet.Damage}, id={packet.InstanceId}");
 
             string key = sender.m_SteamID + ":" + packet.InstanceId;
             if (!_remoteProjectiles.TryGetValue(key, out RemoteProjectile projectile))
@@ -467,7 +477,7 @@ namespace MHZombieMultiplayer
             SendProjectileSnapshot(snapshot);
         }
 
-        private void SendProjectileSnapshot(LocalProjectileSnapshot projectile)
+        public void SendProjectileSnapshot(LocalProjectileSnapshot projectile)
         {
             var state = new ProjectileStatePacket
             {
@@ -482,6 +492,9 @@ namespace MHZombieMultiplayer
                 Damage = projectile.Damage,
             };
 
+            if (_loggedSentProjectileKinds.Add(state.Kind))
+                MultiplayerPlugin.Log.LogInfo($"[Projectile] First sent {state.Kind} shot: damage={state.Damage}, id={state.InstanceId}");
+
             byte[] data = PacketSerializer.Serialize(state);
             int count = SteamMatchmaking.GetNumLobbyMembers(LobbyId);
             for (int i = 0; i < count; i++)
@@ -495,10 +508,8 @@ namespace MHZombieMultiplayer
         private System.Collections.Generic.List<LocalProjectileSnapshot> FindLocalProjectiles()
         {
             var output = new System.Collections.Generic.List<LocalProjectileSnapshot>();
-            foreach (var projectile in FindObjectsOfType<Raulworks.RW_Base_Projectile>())
-                AddProjectileSnapshot(projectile, output);
-            foreach (var projectile in FindObjectsOfType<Raulworks.RW_Gat_Projectile>())
-                AddProjectileSnapshot(projectile, output);
+            // Gun shots are emitted once from RW_Gatling_Gun.HandleProjectile.
+            // Scanning its pooled projectiles here would create duplicate shots.
             foreach (var projectile in FindObjectsOfType<Raulworks.RW_RocketProjectile>())
                 AddProjectileSnapshot(projectile, output);
             return output;

@@ -47,6 +47,58 @@ namespace MHZombieMultiplayer
             typeof(Raulworks.RW_RocketProjectile).GetField("startTime",
                 BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
 
+        private static readonly FieldInfo GatlingLastTube =
+            typeof(Raulworks.RW_Gatling_Gun).GetField("lastTube",
+                BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+
+        private static readonly FieldInfo GatlingCurrentProjectile =
+            typeof(Raulworks.RW_Gatling_Gun).GetField("currentProjectile",
+                BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+
+        public static float GetDamageForKind(ProjectileKind kind)
+        {
+            switch (kind)
+            {
+                case ProjectileKind.Base: return ThirtyMmDamage;
+                case ProjectileKind.Gat: return SevenSixTwoDamage;
+                case ProjectileKind.Rocket: return DefaultRocketDamage;
+                default: return 0f;
+            }
+        }
+
+        // Gun rounds are emitted from RW_Gatling_Gun itself rather than inferred
+        // from its pooled projectile objects. This gives every trigger event a
+        // unique shot and lets the weapon's thirtyMM flag authoritatively select
+        // 30mm versus 7.62 ammunition.
+        public static bool TryCreateGunShot(Raulworks.RW_Gatling_Gun gun, out LocalProjectileSnapshot snapshot)
+        {
+            snapshot = default;
+            if (gun == null || gun.gameObject == null || !gun.gameObject.activeInHierarchy)
+                return false;
+
+            bool thirtyMm = gun.thirtyMM;
+            if (!thirtyMm && ReadObjectField<GameObject>(GatlingCurrentProjectile, gun) != gun.projectile)
+                return false; // Laser mode is not a 7.62 projectile.
+
+            float lastTube = ReadFloatField(GatlingLastTube, gun);
+            Transform muzzle = lastTube > 0.5f ? gun.muzzlePos : gun.secondMuzzlePos;
+            if (muzzle == null)
+                muzzle = gun.muzzlePos != null ? gun.muzzlePos : gun.transform;
+
+            ProjectileKind kind = thirtyMm ? ProjectileKind.Base : ProjectileKind.Gat;
+            snapshot = new LocalProjectileSnapshot
+            {
+                InstanceId = NextNetworkProjectileId(),
+                Position = muzzle.position,
+                Rotation = muzzle.rotation,
+                Velocity = muzzle.forward * 200f,
+                LifeSeconds = thirtyMm ? 8f : 2f,
+                Kind = kind,
+                Damage = GetDamageForKind(kind),
+            };
+            return true;
+        }
+
         public static bool TrySnapshot(MonoBehaviour projectile, out LocalProjectileSnapshot snapshot)
         {
             snapshot = default;
@@ -154,18 +206,23 @@ namespace MHZombieMultiplayer
                 activation.StartTime == activationTime)
                 return activation.NetworkId;
 
+            int networkId = NextNetworkProjectileId();
+            ProjectileActivations[unityInstanceId] = new ProjectileActivation
+            {
+                StartTime = activationTime,
+                NetworkId = networkId,
+            };
+            return networkId;
+        }
+
+        private static int NextNetworkProjectileId()
+        {
             int networkId = Interlocked.Increment(ref _nextNetworkProjectileId);
             if (networkId <= 0)
             {
                 Interlocked.Exchange(ref _nextNetworkProjectileId, 1);
                 networkId = 1;
             }
-
-            ProjectileActivations[unityInstanceId] = new ProjectileActivation
-            {
-                StartTime = activationTime,
-                NetworkId = networkId,
-            };
             return networkId;
         }
 
@@ -188,6 +245,35 @@ namespace MHZombieMultiplayer
                 MultiplayerPlugin.Log.LogWarning($"[ProjectileHelper] startTime read failed: {ex.Message}");
             }
             return Time.time;
+        }
+
+        private static float ReadFloatField(FieldInfo field, object instance)
+        {
+            if (field == null || instance == null) return 0f;
+            try
+            {
+                object value = field.GetValue(instance);
+                if (value is float f) return f;
+            }
+            catch (Exception ex)
+            {
+                MultiplayerPlugin.Log.LogWarning($"[ProjectileHelper] field read failed: {ex.Message}");
+            }
+            return 0f;
+        }
+
+        private static T ReadObjectField<T>(FieldInfo field, object instance) where T : class
+        {
+            if (field == null || instance == null) return null;
+            try
+            {
+                return field.GetValue(instance) as T;
+            }
+            catch (Exception ex)
+            {
+                MultiplayerPlugin.Log.LogWarning($"[ProjectileHelper] object field read failed: {ex.Message}");
+                return null;
+            }
         }
 
         private static float SafeAverageDamage(object instance, string minName, string maxName, string fallbackName)

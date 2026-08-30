@@ -144,9 +144,10 @@ namespace MHZombieMultiplayer
                 if (_recentProjectileHits.ContainsKey(hitKey))
                     return;
 
-                // This is only shooter-side prediction for the ghost model.
-                // The target client authoritatively confirms its own hit.
-                ApplyDamage(damage, hitKey);
+                // The target client authoritatively confirms damage. Recording
+                // the contact here prevents repeated trigger work without also
+                // subtracting predicted damage under a different network shot ID.
+                _recentProjectileHits[hitKey] = Time.time;
             }
         }
 
