@@ -17,6 +17,8 @@ namespace MHZombieMultiplayer
     {
         public static LobbyUI Instance { get; private set; }
 
+        private bool _showUI = true; // F8 shows/hides the windows
+
         private string _joinLobbyIdInput = "";
 
         private readonly List<string> _chatMessages = new List<string>();
@@ -36,6 +38,9 @@ namespace MHZombieMultiplayer
 
         private void Update()
         {
+            if (Input.GetKeyDown(KeyCode.F8))
+                _showUI = !_showUI;
+
             if (Input.GetKeyDown(KeyCode.F9) && NetworkManager.Instance != null)
                 NetworkManager.Instance.HostLobby();
 
@@ -50,6 +55,8 @@ namespace MHZombieMultiplayer
         {
             UiTheme.Apply();
             DrawPvPHealthBar();
+
+            if (!_showUI) return; // F8 hides/shows the windows
 
             GUILayout.Window(9001, _panelRect, DrawLobbyPanel, "", UiTheme.Window);
             UiTheme.DrawOutline(_panelRect, UiTheme.Outline);
@@ -90,7 +97,7 @@ namespace MHZombieMultiplayer
                 DrawLobbySection(nm);
 
             SectionSpace();
-            GUILayout.Label("F9 host · F10 leave", UiTheme.Dim);
+            GUILayout.Label("F8 show/hide · F9 host · F10 leave", UiTheme.Dim);
         }
 
         private void DrawConnectionSection(NetworkManager nm)

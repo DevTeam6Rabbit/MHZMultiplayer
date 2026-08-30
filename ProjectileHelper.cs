@@ -52,8 +52,9 @@ namespace MHZombieMultiplayer
             {
                 kind = ProjectileKind.Gat;
                 lifeSeconds = RemainingLife(2f, GatStartTime, gatProj);
-                damage = SafeFloatValue(gatProj, "damageAmount", "damage");
-                if (damage <= 0f) damage = 12f;
+                // 7.62 minigun bullets have no damage field of their own, so we
+                // define their PvP damage here.
+                damage = 10f;
             }
             else if (projectile is Raulworks.RW_RocketProjectile rocketProj)
             {
@@ -89,7 +90,7 @@ namespace MHZombieMultiplayer
                 return 20f; // 30mm cannon (RW_Base_Projectile)
 
             if (other.GetComponentInParent<Raulworks.RW_Gat_Projectile>() != null)
-                return 12f;
+                return 10f; // 7.62 minigun (RW_Gat_Projectile)
 
             var rocketProj = other.GetComponentInParent<Raulworks.RW_RocketProjectile>();
             if (rocketProj != null)

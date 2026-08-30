@@ -1,4 +1,4 @@
-# MHZ Multiplayer
+# MHZ Multiplayer PvP
 
 A [BepInEx](https://github.com/BepInEx/BepInEx) plugin that adds co-op multiplayer to **MH-Zombie**. Play together over Steam lobbies: remote helicopters with floating name tags, player-vs-player combat with an on-screen health bar and K/D scoreboard, an in-game chat, and a shared time-trial leaderboard.
 
