@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.Reflection;
+using System.Threading;
 using UnityEngine;
 
 namespace MHZombieMultiplayer
@@ -13,6 +15,26 @@ namespace MHZombieMultiplayer
 
     public static class ProjectileHelper
     {
+        // PvP balance values live here so local collision damage and networked
+        // projectile damage cannot drift apart.
+        public const float ThirtyMmDamage = 20f;
+        public const float SevenSixTwoDamage = 10f;
+        public const float DefaultRocketDamage = 50f;
+
+        // MH-Zombie pools and reuses projectile GameObjects. GetInstanceID()
+        // therefore identifies the pooled object, not an individual shot. Keep
+        // one network ID per activation (startTime changes in OnEnable) so a new
+        // 7.62 round cannot be mistaken for an update to an earlier round.
+        private sealed class ProjectileActivation
+        {
+            public float StartTime;
+            public int NetworkId;
+        }
+
+        private static readonly Dictionary<int, ProjectileActivation> ProjectileActivations =
+            new Dictionary<int, ProjectileActivation>();
+        private static int _nextNetworkProjectileId;
+
         private static readonly FieldInfo BaseStartTime =
             typeof(Raulworks.RW_Base_Projectile).GetField("startTime",
                 BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
@@ -39,29 +61,33 @@ namespace MHZombieMultiplayer
             ProjectileKind kind;
             float lifeSeconds;
             float damage;
+            float activationTime;
 
             if (projectile is Raulworks.RW_Base_Projectile baseProj)
             {
                 kind = ProjectileKind.Base;
-                lifeSeconds = RemainingLife(baseProj.timeoutTime, BaseStartTime, baseProj);
+                activationTime = ReadStartTime(BaseStartTime, baseProj);
+                lifeSeconds = RemainingLife(baseProj.timeoutTime, activationTime);
                 // The 30mm cannon fires this projectile; it reads ~50 from the
                 // game, but we define its PvP damage here at 20.
-                damage = 20f;
+                damage = ThirtyMmDamage;
             }
             else if (projectile is Raulworks.RW_Gat_Projectile gatProj)
             {
                 kind = ProjectileKind.Gat;
-                lifeSeconds = RemainingLife(2f, GatStartTime, gatProj);
+                activationTime = ReadStartTime(GatStartTime, gatProj);
+                lifeSeconds = RemainingLife(2f, activationTime);
                 // 7.62 minigun bullets have no damage field of their own, so we
                 // define their PvP damage here.
-                damage = 10f;
+                damage = SevenSixTwoDamage;
             }
             else if (projectile is Raulworks.RW_RocketProjectile rocketProj)
             {
                 kind = ProjectileKind.Rocket;
-                lifeSeconds = RemainingLife(ReadFloatValue(rocketProj, "timeoutTime", "lifeTime", "timeout"), RocketStartTime, rocketProj);
+                activationTime = ReadStartTime(RocketStartTime, rocketProj);
+                lifeSeconds = RemainingLife(ReadFloatValue(rocketProj, "timeoutTime", "lifeTime", "timeout"), activationTime);
                 damage = SafeFloatValue(rocketProj, "damageAmount", "damage", "explosionDamage");
-                if (damage <= 0f) damage = 50f;
+                if (damage <= 0f) damage = DefaultRocketDamage;
             }
             else
             {
@@ -70,7 +96,7 @@ namespace MHZombieMultiplayer
 
             snapshot = new LocalProjectileSnapshot
             {
-                InstanceId = go.GetInstanceID(),
+                InstanceId = GetNetworkProjectileId(go.GetInstanceID(), activationTime),
                 Position = go.transform.position,
                 Rotation = go.transform.rotation,
                 Velocity = rb != null ? rb.velocity : Vector3.zero,
@@ -87,16 +113,16 @@ namespace MHZombieMultiplayer
 
             var baseProj = other.GetComponentInParent<Raulworks.RW_Base_Projectile>();
             if (baseProj != null)
-                return 20f; // 30mm cannon (RW_Base_Projectile)
+                return ThirtyMmDamage; // 30mm cannon (RW_Base_Projectile)
 
             if (other.GetComponentInParent<Raulworks.RW_Gat_Projectile>() != null)
-                return 10f; // 7.62 minigun (RW_Gat_Projectile)
+                return SevenSixTwoDamage; // 7.62 minigun (RW_Gat_Projectile)
 
             var rocketProj = other.GetComponentInParent<Raulworks.RW_RocketProjectile>();
             if (rocketProj != null)
             {
                 float damage = SafeFloatValue(rocketProj, "damageAmount", "damage", "explosionDamage");
-                return damage > 0f ? damage : 50f;
+                return damage > 0f ? damage : DefaultRocketDamage;
             }
 
             return 0f;
@@ -122,11 +148,31 @@ namespace MHZombieMultiplayer
             return false;
         }
 
-        private static float RemainingLife(float timeout, FieldInfo startTimeField, object instance)
+        private static int GetNetworkProjectileId(int unityInstanceId, float activationTime)
+        {
+            if (ProjectileActivations.TryGetValue(unityInstanceId, out ProjectileActivation activation) &&
+                activation.StartTime == activationTime)
+                return activation.NetworkId;
+
+            int networkId = Interlocked.Increment(ref _nextNetworkProjectileId);
+            if (networkId <= 0)
+            {
+                Interlocked.Exchange(ref _nextNetworkProjectileId, 1);
+                networkId = 1;
+            }
+
+            ProjectileActivations[unityInstanceId] = new ProjectileActivation
+            {
+                StartTime = activationTime,
+                NetworkId = networkId,
+            };
+            return networkId;
+        }
+
+        private static float RemainingLife(float timeout, float startTime)
         {
             if (timeout <= 0f) timeout = 2f;
-            float start = ReadStartTime(startTimeField, instance);
-            return Mathf.Max(0.05f, timeout - (Time.time - start));
+            return Mathf.Max(0.05f, timeout - (Time.time - startTime));
         }
 
         private static float ReadStartTime(FieldInfo field, object instance)

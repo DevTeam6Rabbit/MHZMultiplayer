@@ -19,28 +19,32 @@ namespace MHZombieMultiplayer
         public static void InstallRuntimeProjectileHooks()
         {
             if (_projectileHooksInstalled) return;
+            var harmony = new Harmony("com.mhzombie.multiplayer.runtime.projectiles");
+            var postfix = new HarmonyMethod(typeof(RuntimeProjectileHook).GetMethod(nameof(RuntimeProjectileHook.Postfix), BindingFlags.Static | BindingFlags.Public));
+
+            bool baseHooked = TryPatchProjectileFire(harmony, typeof(Raulworks.RW_Base_Projectile), postfix);
+            bool gatHooked = TryPatchProjectileFire(harmony, typeof(Raulworks.RW_Gat_Projectile), postfix);
+            bool rocketHooked = TryPatchProjectileFire(harmony, typeof(Raulworks.RW_RocketProjectile), postfix);
+            _projectileHooksInstalled = baseHooked && gatHooked && rocketHooked;
+
+            MultiplayerPlugin.Log.LogInfo($"[ProjectileHook] Installed: 30mm={baseHooked}, 7.62={gatHooked}, rocket={rocketHooked}.");
+        }
+
+        private static bool TryPatchProjectileFire(Harmony harmony, Type projectileType, HarmonyMethod postfix)
+        {
             try
             {
-                var harmony = new Harmony("com.mhzombie.multiplayer.runtime.projectiles");
-                var postfix = new HarmonyMethod(typeof(RuntimeProjectileHook).GetMethod(nameof(RuntimeProjectileHook.Postfix), BindingFlags.Static | BindingFlags.Public));
-                PatchProjectileFire(harmony, typeof(Raulworks.RW_Base_Projectile), postfix);
-                PatchProjectileFire(harmony, typeof(Raulworks.RW_Gat_Projectile), postfix);
-                PatchProjectileFire(harmony, typeof(Raulworks.RW_RocketProjectile), postfix);
-                _projectileHooksInstalled = true;
-                MultiplayerPlugin.Log.LogInfo("[ProjectileHook] Hooked base, gatling, and rocket fire events.");
+                MethodInfo fire = projectileType.GetMethod("FireProjectile", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                if (fire == null)
+                    throw new MissingMethodException(projectileType.FullName, "FireProjectile");
+                harmony.Patch(fire, postfix: postfix);
+                return true;
             }
             catch (Exception ex)
             {
-                MultiplayerPlugin.Log.LogWarning($"[ProjectileHook] installation failed: {ex.Message}");
+                MultiplayerPlugin.Log.LogWarning($"[ProjectileHook] {projectileType.Name} installation failed: {ex.Message}");
+                return false;
             }
-        }
-
-        private static void PatchProjectileFire(Harmony harmony, Type projectileType, HarmonyMethod postfix)
-        {
-            MethodInfo fire = projectileType.GetMethod("FireProjectile", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-            if (fire == null)
-                throw new MissingMethodException(projectileType.FullName, "FireProjectile");
-            harmony.Patch(fire, postfix: postfix);
         }
 
         // Installs a postfix on RW_On_Death.Die() so an in-game death (crash,
@@ -112,7 +116,7 @@ namespace MHZombieMultiplayer
                 }
                 catch (Exception ex)
                 {
-                    MultiplayerPlugin.Log.LogWarning($"[ProjectileHook] prefix failure: {ex.Message}");
+                    MultiplayerPlugin.Log.LogWarning($"[ProjectileHook] postfix failure: {ex.Message}");
                 }
             }
         }
