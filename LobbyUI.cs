@@ -52,23 +52,46 @@ namespace MHZombieMultiplayer
 
         private void OnGUI()
         {
+            UiTheme.Apply();
+
+            DrawPvPHealthBar();
+
             if (_showPanel)
-                _panelRect = GUILayout.Window(9001, _panelRect, DrawLobbyPanel, "MHZ Multiplayer");
+            {
+                _panelRect = GUILayout.Window(9001, _panelRect, DrawLobbyPanel, "", UiTheme.Window);
+                UiTheme.DrawOutline(_panelRect, UiTheme.Outline);
+            }
 
             if (_showChat)
-                _chatRect = GUILayout.Window(9002, _chatRect, DrawChatPanel, "Chat");
+            {
+                _chatRect = GUILayout.Window(9002, _chatRect, DrawChatPanel, "", UiTheme.Window);
+                UiTheme.DrawOutline(_chatRect, UiTheme.Outline);
+            }
 
             if (_showScoreboard)
             {
                 if (_scoreRect.x < 0) // dock to the right edge on first draw
                     _scoreRect = new Rect(Screen.width - _scoreRect.width - 20, 20,
                                           _scoreRect.width, _scoreRect.height);
-                _scoreRect = GUILayout.Window(9003, _scoreRect, DrawScoreboardPanel, "Time Trial Scoreboard");
+                _scoreRect = GUILayout.Window(9003, _scoreRect, DrawScoreboardPanel, "", UiTheme.Window);
+                UiTheme.DrawOutline(_scoreRect, UiTheme.Outline);
             }
+        }
+
+        // Draw a window's title band + accent underline as the first elements of
+        // a window's content. Drawn via GUILayout so it always shows and can't
+        // overlap the content below it.
+        private static void DrawWindowHeader(string title)
+        {
+            GUILayout.Label(title, UiTheme.HeaderBar);
+            GUILayout.Box("", UiTheme.Hr);
+            GUILayout.Space(6);
         }
 
         private void DrawScoreboardPanel(int id)
         {
+            DrawWindowHeader("Time Trial Scoreboard");
+
             LocalPlayerCombat combat = LocalPlayerCombat.EnsureAttached();
             if (combat != null)
             {
@@ -79,18 +102,18 @@ namespace MHZombieMultiplayer
             var pvpEntries = ScoreboardManager.GetPvPEntries();
             if (pvpEntries.Count > 0)
             {
-                GUILayout.Label("PvP Combat");
+                GUILayout.Label("PvP Combat", UiTheme.Header);
                 foreach (var entry in pvpEntries)
                     GUILayout.Label($"{entry.Name}: K {entry.Kills} / D {entry.Deaths} | dealt {entry.DamageDealt:F0} | taken {entry.DamageTaken:F0}");
                 GUILayout.Space(8);
             }
 
-            GUILayout.Label("Time Trial");
+            GUILayout.Label("Time Trial", UiTheme.Header);
             var entries = ScoreboardManager.Entries;
             if (entries.Count == 0)
             {
                 GUILayout.Label("No finishes yet.");
-                GUILayout.Label("Complete a time trial run to post a time!");
+                GUILayout.Label("Complete a time trial run to post a time!", UiTheme.Dim);
             }
             else
             {
@@ -120,6 +143,8 @@ namespace MHZombieMultiplayer
 
         private void DrawLobbyPanel(int id)
         {
+            DrawWindowHeader("MHZ Multiplayer");
+
             var nm = NetworkManager.Instance;
             if (nm == null) { GUILayout.Label("NetworkManager not loaded."); GUI.DragWindow(); return; }
 
@@ -133,7 +158,7 @@ namespace MHZombieMultiplayer
                     nm.HostLobby();
 
                 GUILayout.Space(8);
-                GUILayout.Label("— OR join a friend's lobby —");
+                GUILayout.Label("— OR join a friend's lobby —", UiTheme.Dim);
 
                 GUILayout.BeginHorizontal();
                 GUILayout.Label("Lobby ID:", GUILayout.Width(70));
@@ -149,7 +174,7 @@ namespace MHZombieMultiplayer
                 }
 
                 GUILayout.Space(8);
-                GUILayout.Label("Tip: your friend can invite you via Steam overlay too.");
+                GUILayout.Label("Tip: your friend can invite you via Steam overlay too.", UiTheme.Dim);
             }
             else
             {
@@ -159,7 +184,7 @@ namespace MHZombieMultiplayer
 
                 if (nm.IsHost)
                 {
-                    GUILayout.Label("Share this ID with friends, or invite via Steam overlay.");
+                    GUILayout.Label("Share this ID with friends, or invite via Steam overlay.", UiTheme.Dim);
                     if (GUILayout.Button("Copy Lobby ID to Clipboard"))
                         GUIUtility.systemCopyBuffer = nm.LobbyId.ToString();
                 }
@@ -191,13 +216,15 @@ namespace MHZombieMultiplayer
             }
 
             GUILayout.Space(8);
-            GUILayout.Label("F8 = toggle this panel");
+            GUILayout.Label("F8 = toggle this panel", UiTheme.Dim);
 
             GUI.DragWindow();
         }
 
         private void DrawChatPanel(int id)
         {
+            DrawWindowHeader("Chat");
+
             _chatScroll = GUILayout.BeginScrollView(_chatScroll, GUILayout.Height(130));
             foreach (string msg in _chatMessages)
                 GUILayout.Label(msg);
@@ -214,6 +241,41 @@ namespace MHZombieMultiplayer
             GUILayout.EndHorizontal();
 
             GUI.DragWindow();
+        }
+
+        // HUD health bar pinned to the bottom-center of the screen showing the
+        // local player's PvP health (LocalPlayerCombat.Health / MaxHealth).
+        private void DrawPvPHealthBar()
+        {
+            LocalPlayerCombat combat = LocalPlayerCombat.EnsureAttached();
+            if (combat == null) return;
+
+            const int barWidth = 240;
+            const int barHeight = 18;
+            const int gap = 10;
+            const int labelWidth = 110;
+            const int marginBottom = 28;
+
+            float hp = Mathf.Clamp(combat.Health, 0f, LocalPlayerCombat.MaxHealth);
+            float frac = hp / LocalPlayerCombat.MaxHealth;
+
+            int totalWidth = barWidth + gap + labelWidth;
+            float x = (Screen.width - totalWidth) / 2f;
+            float y = Screen.height - marginBottom - barHeight;
+
+            // Backdrop with a 1px border
+            Rect back = new Rect(x, y, barWidth, barHeight);
+            UiTheme.DrawFrame(back, UiTheme.Border, UiTheme.Bg);
+
+            // Fill inset inside the border, colored green -> red by health
+            float innerWidth = Mathf.Max(0f, (barWidth - 4f) * frac);
+            Rect fill = new Rect(back.x + 2f, back.y + 2f, innerWidth, barHeight - 4f);
+            Color hpColor = Color.Lerp(Color.red, Color.green, frac);
+            UiTheme.DrawRect(fill, hpColor);
+
+            // Numeric HP readout to the right of the bar
+            Rect labelRect = new Rect(back.x + barWidth + gap, y, labelWidth, barHeight);
+            GUI.Label(labelRect, $"HP {hp:F0}/{LocalPlayerCombat.MaxHealth:F0}");
         }
 
         public void ShowHostedLobby(CSteamID lobbyId)

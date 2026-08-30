@@ -38,22 +38,38 @@ namespace MHZombieMultiplayer
             _targetRotation = transform.rotation;
             _lastUpdateTime = Time.time;
 
-            // Create floating name label
+            // Create a floating name label as a crisp TextMesh. The old version
+            // used a bare `new Material(Shader.Find("GUI/Text Shader"))` (which
+            // has no font atlas texture and may be missing from the build) and a
+            // low fontSize, so names rendered as blocky solid quads. Here we load
+            // the real built-in font, clone its material so _MainTex is the font
+            // atlas, and use a high fontSize for sharp glyphs up close.
             GameObject labelObj = new GameObject("NameLabel");
             labelObj.transform.SetParent(transform, false);
-            labelObj.transform.localPosition = new Vector3(0f, 3.5f, 0f);
             _nameLabel = labelObj.AddComponent<TextMesh>();
             _nameLabel.text = DisplayName ?? "Player";
-            _nameLabel.fontSize = 80;
-            _nameLabel.characterSize = 0.45f;
+            _nameLabel.fontSize = 200;
+            _nameLabel.characterSize = 0.675f;
             _nameLabel.alignment = TextAlignment.Center;
-            _nameLabel.anchor = TextAnchor.LowerCenter;
-            _nameLabel.color = Color.cyan;
+            _nameLabel.anchor = TextAnchor.MiddleCenter;
             _nameLabel.fontStyle = FontStyle.Bold;
             _nameLabel.offsetZ = 0.2f;
+
+            // The built-in font name differs across Unity versions; try both.
+            Font labelFont = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            if (labelFont == null)
+                labelFont = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            if (labelFont != null)
+            {
+                _nameLabel.font = labelFont;
+                // Clone the font's own material so _MainTex is the font atlas;
+                // a fresh Material(...) has no texture and draws solid blocks.
+                labelObj.GetComponent<MeshRenderer>().material = new Material(labelFont.material);
+            }
+            _nameLabel.color = Color.cyan;
+
             labelObj.transform.localPosition = new Vector3(0f, 5.5f, 0f);
-            labelObj.transform.localScale = Vector3.one * 0.6f;
-            labelObj.GetComponent<Renderer>().material = new Material(Shader.Find("GUI/Text Shader"));
+            labelObj.transform.localScale = Vector3.one;
 
             // If the factory managed a real copy at spawn, there's no placeholder
             _visualsBuilt = transform.Find("PlaceholderBox") == null;

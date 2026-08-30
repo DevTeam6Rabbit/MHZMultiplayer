@@ -50,8 +50,9 @@ namespace MHZombieMultiplayer
             {
                 kind = ProjectileKind.Gat;
                 lifeSeconds = RemainingLife(2f, GatStartTime, gatProj);
-                damage = SafeFloatValue(gatProj, "damageAmount", "damage");
-                if (damage <= 0f) damage = 12f;
+                // The 30mm gun (RW_Gatling_Gun) fires this projectile, which has
+                // no damage field of its own, so we define its PvP damage here.
+                damage = 20f;
             }
             else if (projectile is Raulworks.RW_RocketProjectile rocketProj)
             {
@@ -87,7 +88,7 @@ namespace MHZombieMultiplayer
                 return SafeAverageDamage(baseProj, "damageAmountMin", "damageAmountMax", "damageAmount");
 
             if (other.GetComponentInParent<Raulworks.RW_Gat_Projectile>() != null)
-                return 12f;
+                return 20f; // 30mm gun (RW_Gatling_Gun -> RW_Gat_Projectile)
 
             var rocketProj = other.GetComponentInParent<Raulworks.RW_RocketProjectile>();
             if (rocketProj != null)
