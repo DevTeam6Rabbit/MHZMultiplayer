@@ -69,7 +69,9 @@ namespace MHZombieMultiplayer
             if (!IsAlive || attackerId == SteamUser.GetSteamID().m_SteamID)
                 return false;
 
-            damage = Mathf.Clamp(damage, 1f, 100f);
+            damage = ProjectileHelper.GetDamageForKind(kind);
+            if (damage <= 0f)
+                return false;
             string key = attackerId + ":" + projectileInstanceId;
             if (_receivedProjectiles.ContainsKey(key))
                 return false;

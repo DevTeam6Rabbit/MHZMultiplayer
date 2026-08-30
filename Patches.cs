@@ -19,28 +19,32 @@ namespace MHZombieMultiplayer
         public static void InstallRuntimeProjectileHooks()
         {
             if (_projectileHooksInstalled) return;
+            var harmony = new Harmony("com.mhzombie.multiplayer.runtime.projectiles");
+            var projectilePostfix = new HarmonyMethod(typeof(RuntimeProjectileHook).GetMethod(nameof(RuntimeProjectileHook.Postfix), BindingFlags.Static | BindingFlags.Public));
+            var gunPostfix = new HarmonyMethod(typeof(RuntimeGunFireHook).GetMethod(nameof(RuntimeGunFireHook.Postfix), BindingFlags.Static | BindingFlags.Public));
+
+            bool gunHooked = TryPatchMethod(harmony, typeof(Raulworks.RW_Gatling_Gun), "HandleProjectile", gunPostfix);
+            bool rocketHooked = TryPatchMethod(harmony, typeof(Raulworks.RW_RocketProjectile), "FireProjectile", projectilePostfix);
+            _projectileHooksInstalled = gunHooked && rocketHooked;
+
+            MultiplayerPlugin.Log.LogInfo($"[ProjectileHook] Installed: gun(30mm/7.62)={gunHooked}, rocket={rocketHooked}.");
+        }
+
+        private static bool TryPatchMethod(Harmony harmony, Type type, string methodName, HarmonyMethod postfix)
+        {
             try
             {
-                var harmony = new Harmony("com.mhzombie.multiplayer.runtime.projectiles");
-                var postfix = new HarmonyMethod(typeof(RuntimeProjectileHook).GetMethod(nameof(RuntimeProjectileHook.Postfix), BindingFlags.Static | BindingFlags.Public));
-                PatchProjectileFire(harmony, typeof(Raulworks.RW_Base_Projectile), postfix);
-                PatchProjectileFire(harmony, typeof(Raulworks.RW_Gat_Projectile), postfix);
-                PatchProjectileFire(harmony, typeof(Raulworks.RW_RocketProjectile), postfix);
-                _projectileHooksInstalled = true;
-                MultiplayerPlugin.Log.LogInfo("[ProjectileHook] Hooked base, gatling, and rocket fire events.");
+                MethodInfo method = type.GetMethod(methodName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                if (method == null)
+                    throw new MissingMethodException(type.FullName, methodName);
+                harmony.Patch(method, postfix: postfix);
+                return true;
             }
             catch (Exception ex)
             {
-                MultiplayerPlugin.Log.LogWarning($"[ProjectileHook] installation failed: {ex.Message}");
+                MultiplayerPlugin.Log.LogWarning($"[ProjectileHook] {type.Name}.{methodName} installation failed: {ex.Message}");
+                return false;
             }
-        }
-
-        private static void PatchProjectileFire(Harmony harmony, Type projectileType, HarmonyMethod postfix)
-        {
-            MethodInfo fire = projectileType.GetMethod("FireProjectile", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-            if (fire == null)
-                throw new MissingMethodException(projectileType.FullName, "FireProjectile");
-            harmony.Patch(fire, postfix: postfix);
         }
 
         // Installs a postfix on RW_On_Death.Die() so an in-game death (crash,
@@ -112,7 +116,26 @@ namespace MHZombieMultiplayer
                 }
                 catch (Exception ex)
                 {
-                    MultiplayerPlugin.Log.LogWarning($"[ProjectileHook] prefix failure: {ex.Message}");
+                    MultiplayerPlugin.Log.LogWarning($"[ProjectileHook] postfix failure: {ex.Message}");
+                }
+            }
+        }
+
+        public static class RuntimeGunFireHook
+        {
+            public static void Postfix(Raulworks.RW_Gatling_Gun __instance)
+            {
+                if (NetworkManager.Instance == null || !NetworkManager.Instance.IsConnected)
+                    return;
+
+                try
+                {
+                    if (ProjectileHelper.TryCreateGunShot(__instance, out LocalProjectileSnapshot shot))
+                        NetworkManager.Instance.SendProjectileSnapshot(shot);
+                }
+                catch (Exception ex)
+                {
+                    MultiplayerPlugin.Log.LogWarning($"[ProjectileHook] gun postfix failure: {ex.Message}");
                 }
             }
         }
