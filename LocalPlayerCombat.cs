@@ -10,14 +10,10 @@ namespace MHZombieMultiplayer
     public sealed class LocalPlayerCombat : MonoBehaviour
     {
         public const float MaxHealth = 100f;
-        private const float RespawnDelay = 5f;
 
         private readonly Dictionary<string, float> _receivedProjectiles = new Dictionary<string, float>();
         private readonly List<BehaviourState> _disabledBehaviours = new List<BehaviourState>();
         private Rigidbody _rigidbody;
-        private Vector3 _spawnPosition;
-        private Quaternion _spawnRotation;
-        private float _respawnAt = -1f;
 
         public float Health { get; private set; } = MaxHealth;
         public bool IsAlive => Health > 0f;
@@ -36,17 +32,12 @@ namespace MHZombieMultiplayer
         private void Awake()
         {
             _rigidbody = GetComponent<Rigidbody>();
-            _spawnPosition = transform.position;
-            _spawnRotation = transform.rotation;
             EnsureHitbox();
             MultiplayerPlugin.Log.LogInfo("[PvP] Local helicopter combat receiver ready (100 health).");
         }
 
         private void Update()
         {
-            if (_respawnAt > 0f && Time.time >= _respawnAt)
-                Respawn();
-
             if (_receivedProjectiles.Count == 0) return;
             float cutoff = Time.time - 10f;
             var expired = new List<string>();
@@ -99,7 +90,6 @@ namespace MHZombieMultiplayer
 
         private void Eliminate()
         {
-            _respawnAt = Time.time + RespawnDelay;
             _disabledBehaviours.Clear();
             foreach (Behaviour behaviour in GetComponentsInChildren<Behaviour>(true))
             {
@@ -119,25 +109,35 @@ namespace MHZombieMultiplayer
                 _rigidbody.isKinematic = true;
             }
 
-            LobbyUI.Instance?.AddChatMessage($"[PvP] You were eliminated. Respawning in {RespawnDelay:F0}s.");
+            LobbyUI.Instance?.AddChatMessage("[PvP] You were eliminated!");
+
+            // Restart exactly like the pause menu's Restart button: it calls
+            // RW_Menu.LoadTargetScene(), which reloads the current level through
+            // SceneManager. No more 5-second timer + manual respawn.
+            RestartLevel();
         }
 
-        private void Respawn()
+        // The pause menu's Restart button fires RW_Menu.LoadTargetScene(), which
+        // reloads the active scene (and unpauses audio). Replicating that here
+        // gives the same hard restart the button performs. The scene's RW_Menu
+        // instance may be inactive, so include inactive objects when searching.
+        private void RestartLevel()
         {
-            transform.SetPositionAndRotation(_spawnPosition, _spawnRotation);
-            if (_rigidbody != null)
+            var menus = FindObjectsOfType<Raulworks.RW_Menu>(true);
+            for (int i = 0; i < menus.Length; i++)
             {
-                _rigidbody.isKinematic = false;
-                _rigidbody.velocity = Vector3.zero;
-                _rigidbody.angularVelocity = Vector3.zero;
+                var menu = menus[i];
+                if (menu == null) continue;
+                if (menu.gameObject.activeInHierarchy)
+                {
+                    menu.LoadTargetScene();
+                    return;
+                }
             }
-            foreach (BehaviourState saved in _disabledBehaviours)
-                if (saved.Behaviour != null) saved.Behaviour.enabled = saved.Enabled;
-            _disabledBehaviours.Clear();
-            Health = MaxHealth;
-            _respawnAt = -1f;
-            LobbyUI.Instance?.AddChatMessage("[PvP] Respawned with full health.");
-            MultiplayerPlugin.Log.LogInfo("[PvP] Local helicopter respawned.");
+
+            // Fallback: no usable RW_Menu in this scene, so restart whatever is loaded.
+            UnityEngine.SceneManagement.SceneManager.LoadScene(
+                UnityEngine.SceneManagement.SceneManager.GetActiveScene().buildIndex);
         }
 
         private struct BehaviourState
