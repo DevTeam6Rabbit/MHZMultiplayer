@@ -65,9 +65,13 @@ namespace MHZombieMultiplayer
                 HeliLocator.Invalidate();
                 try { TimeTrialHook.Install(); }
                 catch (System.Exception ex) { Log.LogError($"TimeTrialHook install failed: {ex}"); }
+                try { Patches.InstallRuntimeProjectileHooks(); }
+                catch (System.Exception ex) { Log.LogError($"Projectile hook install failed: {ex}"); }
             };
             try { TimeTrialHook.Install(); }
             catch (System.Exception ex) { Log.LogError($"TimeTrialHook install failed: {ex}"); }
+            try { Patches.InstallRuntimeProjectileHooks(); }
+            catch (System.Exception ex) { Log.LogError($"Projectile hook install failed: {ex}"); }
         }
 
         private void OnDestroy()

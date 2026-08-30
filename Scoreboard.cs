@@ -8,6 +8,15 @@ namespace MHZombieMultiplayer
 {
     public static class ScoreboardManager
     {
+        public struct PvPEntry
+        {
+            public string Name;
+            public float DamageDealt;
+            public float DamageTaken;
+            public int Kills;
+            public int Deaths;
+        }
+
         public struct ScoreEntry
         {
             public string Name;
@@ -15,6 +24,38 @@ namespace MHZombieMultiplayer
         }
 
         public static readonly List<ScoreEntry> Entries = new List<ScoreEntry>();
+        public static readonly Dictionary<ulong, PvPEntry> PvPEntries = new Dictionary<ulong, PvPEntry>();
+
+        public static void ReportDamageTaken(ulong attackerId, float damage, bool eliminated)
+        {
+            ulong localId = SteamUser.GetSteamID().m_SteamID;
+            PvPEntry local = GetPvPEntry(localId);
+            local.DamageTaken += damage;
+            if (eliminated) local.Deaths++;
+            PvPEntries[localId] = local;
+        }
+
+        public static void ReportDamageDealt(ulong targetId, float damage, bool eliminated)
+        {
+            ulong localId = SteamUser.GetSteamID().m_SteamID;
+            PvPEntry local = GetPvPEntry(localId);
+            local.DamageDealt += damage;
+            if (eliminated) local.Kills++;
+            PvPEntries[localId] = local;
+        }
+
+        public static List<PvPEntry> GetPvPEntries()
+        {
+            var entries = new List<PvPEntry>(PvPEntries.Values);
+            entries.Sort((a, b) => b.Kills != a.Kills ? b.Kills.CompareTo(a.Kills) : b.DamageDealt.CompareTo(a.DamageDealt));
+            return entries;
+        }
+
+        private static PvPEntry GetPvPEntry(ulong steamId)
+        {
+            if (PvPEntries.TryGetValue(steamId, out PvPEntry entry)) return entry;
+            return new PvPEntry { Name = steamId == SteamUser.GetSteamID().m_SteamID ? SteamFriends.GetPersonaName() : SteamFriends.GetFriendPersonaName(new CSteamID(steamId)) };
+        }
 
         public static void ReportLocalFinish(float timeSeconds)
         {
@@ -49,7 +90,11 @@ namespace MHZombieMultiplayer
             if (Entries.Count > 20) Entries.RemoveAt(Entries.Count - 1);
         }
 
-        public static void Clear() => Entries.Clear();
+        public static void Clear()
+        {
+            Entries.Clear();
+            PvPEntries.Clear();
+        }
 
         public static string FormatTime(float seconds)
         {

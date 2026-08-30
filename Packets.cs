@@ -20,6 +20,7 @@ namespace MHZombieMultiplayer
         public Vector3 Position;
         public Quaternion Rotation;
         public Vector3 Velocity;
+        public float Health;
     }
 
     public struct ProjectileStatePacket
@@ -27,6 +28,8 @@ namespace MHZombieMultiplayer
         public PacketType PacketType;
         public ulong SteamId;
         public int InstanceId;
+        public ProjectileKind Kind;
+        public float Damage;
         public Vector3 Position;
         public Quaternion Rotation;
         public Vector3 Velocity;
@@ -54,6 +57,7 @@ namespace MHZombieMultiplayer
         public ulong AttackerSteamId;
         public float Damage;
         public int ProjectileInstanceId;
+        public float TargetHealthAfter;
     }
 
     public static class PacketSerializer
@@ -65,11 +69,11 @@ namespace MHZombieMultiplayer
         }
 
         // ── HeliState ──────────────────────────────────────────────────────────
-        // Layout: [type(1)] [steamId(8)] [pos(12)] [rot(16)] [vel(12)] = 49 bytes
+        // Layout: [type(1)] [steamId(8)] [pos(12)] [rot(16)] [vel(12)] [health(4)] = 53 bytes
 
         public static byte[] Serialize(HeliStatePacket p)
         {
-            using (var ms = new MemoryStream(49))
+            using (var ms = new MemoryStream(53))
             using (var w = new BinaryWriter(ms))
             {
                 w.Write((byte)p.PacketType);
@@ -77,6 +81,7 @@ namespace MHZombieMultiplayer
                 WriteVec3(w, p.Position);
                 WriteQuat(w, p.Rotation);
                 WriteVec3(w, p.Velocity);
+                w.Write(p.Health);
                 return ms.ToArray();
             }
         }
@@ -93,6 +98,7 @@ namespace MHZombieMultiplayer
                     Position   = ReadVec3(r),
                     Rotation   = ReadQuat(r),
                     Velocity   = ReadVec3(r),
+                    Health     = r.ReadSingle(),
                 };
             }
         }
@@ -157,7 +163,7 @@ namespace MHZombieMultiplayer
 
         public static byte[] Serialize(PlayerDamagePacket p)
         {
-            using (var ms = new MemoryStream())
+            using (var ms = new MemoryStream(1 + 8 + 8 + 4 + 4 + 4))
             using (var w = new BinaryWriter(ms))
             {
                 w.Write((byte)p.PacketType);
@@ -165,6 +171,7 @@ namespace MHZombieMultiplayer
                 w.Write(p.AttackerSteamId);
                 w.Write(p.Damage);
                 w.Write(p.ProjectileInstanceId);
+                w.Write(p.TargetHealthAfter);
                 return ms.ToArray();
             }
         }
@@ -181,6 +188,7 @@ namespace MHZombieMultiplayer
                     AttackerSteamId = r.ReadUInt64(),
                     Damage = r.ReadSingle(),
                     ProjectileInstanceId = r.ReadInt32(),
+                    TargetHealthAfter = r.ReadSingle(),
                 };
             }
         }
@@ -189,12 +197,14 @@ namespace MHZombieMultiplayer
 
         public static byte[] Serialize(ProjectileStatePacket p)
         {
-            using (var ms = new MemoryStream(1 + 8 + 4 + 12 + 16 + 12 + 4))
+            using (var ms = new MemoryStream(1 + 8 + 4 + 1 + 4 + 12 + 16 + 12 + 4))
             using (var w = new BinaryWriter(ms))
             {
                 w.Write((byte)p.PacketType);
                 w.Write(p.SteamId);
                 w.Write(p.InstanceId);
+                w.Write((byte)p.Kind);
+                w.Write(p.Damage);
                 WriteVec3(w, p.Position);
                 WriteQuat(w, p.Rotation);
                 WriteVec3(w, p.Velocity);
@@ -213,6 +223,8 @@ namespace MHZombieMultiplayer
                     PacketType = (PacketType)r.ReadByte(),
                     SteamId = r.ReadUInt64(),
                     InstanceId = r.ReadInt32(),
+                    Kind = (ProjectileKind)r.ReadByte(),
+                    Damage = r.ReadSingle(),
                     Position = ReadVec3(r),
                     Rotation = ReadQuat(r),
                     Velocity = ReadVec3(r),

@@ -69,6 +69,23 @@ namespace MHZombieMultiplayer
 
         private void DrawScoreboardPanel(int id)
         {
+            LocalPlayerCombat combat = LocalPlayerCombat.EnsureAttached();
+            if (combat != null)
+            {
+                GUILayout.Label($"PvP Health: {combat.Health:F0}/{LocalPlayerCombat.MaxHealth:F0}");
+                GUILayout.Space(4);
+            }
+
+            var pvpEntries = ScoreboardManager.GetPvPEntries();
+            if (pvpEntries.Count > 0)
+            {
+                GUILayout.Label("PvP Combat");
+                foreach (var entry in pvpEntries)
+                    GUILayout.Label($"{entry.Name}: K {entry.Kills} / D {entry.Deaths} | dealt {entry.DamageDealt:F0} | taken {entry.DamageTaken:F0}");
+                GUILayout.Space(8);
+            }
+
+            GUILayout.Label("Time Trial");
             var entries = ScoreboardManager.Entries;
             if (entries.Count == 0)
             {

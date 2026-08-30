@@ -13,42 +13,20 @@ namespace MHZombieMultiplayer
     // because of exactly that.
     public static class Patches
     {
+        private static bool _projectileHooksInstalled;
+
         public static void InstallRuntimeProjectileHooks()
         {
+            if (_projectileHooksInstalled) return;
             try
             {
-                foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
-                {
-                    foreach (var type in assembly.GetTypes())
-                    {
-                        if (type == null || type.IsAbstract || type.IsEnum)
-                            continue;
-
-                        if (!type.Name.Contains("Projectile") && !type.Name.Contains("Weapon") && !type.Name.Contains("Gun") && !type.Name.Contains("Launcher"))
-                            continue;
-
-                        foreach (var method in type.GetMethods(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly))
-                        {
-                            if (method == null) continue;
-                            string name = method.Name;
-                            if (!name.Contains("Fire") && !name.Contains("Shoot") && !name.Contains("Spawn") && !name.Contains("Launch") && !name.Contains("Projectile"))
-                                continue;
-
-                            if (method.ReturnType == typeof(void) || method.ReturnType == typeof(GameObject) || typeof(Component).IsAssignableFrom(method.ReturnType) || typeof(UnityEngine.Object).IsAssignableFrom(method.ReturnType))
-                            {
-                                try
-                                {
-                                    var harmony = new Harmony("com.mhzombie.multiplayer.runtime.projectiles");
-                                    harmony.Patch(method, new HarmonyMethod(typeof(RuntimeProjectileHook).GetMethod(nameof(RuntimeProjectileHook.Prefix), BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic)), null, null);
-                                }
-                                catch (Exception ex)
-                                {
-                                    MultiplayerPlugin.Log.LogWarning($"[ProjectileHook] patch failed for {type.FullName}.{method.Name}: {ex.Message}");
-                                }
-                            }
-                        }
-                    }
-                }
+                var harmony = new Harmony("com.mhzombie.multiplayer.runtime.projectiles");
+                var postfix = new HarmonyMethod(typeof(RuntimeProjectileHook).GetMethod(nameof(RuntimeProjectileHook.Postfix), BindingFlags.Static | BindingFlags.Public));
+                PatchProjectileFire(harmony, typeof(Raulworks.RW_Base_Projectile), postfix);
+                PatchProjectileFire(harmony, typeof(Raulworks.RW_Gat_Projectile), postfix);
+                PatchProjectileFire(harmony, typeof(Raulworks.RW_RocketProjectile), postfix);
+                _projectileHooksInstalled = true;
+                MultiplayerPlugin.Log.LogInfo("[ProjectileHook] Hooked base, gatling, and rocket fire events.");
             }
             catch (Exception ex)
             {
@@ -56,35 +34,28 @@ namespace MHZombieMultiplayer
             }
         }
 
+        private static void PatchProjectileFire(Harmony harmony, Type projectileType, HarmonyMethod postfix)
+        {
+            MethodInfo fire = projectileType.GetMethod("FireProjectile", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            if (fire == null)
+                throw new MissingMethodException(projectileType.FullName, "FireProjectile");
+            harmony.Patch(fire, postfix: postfix);
+        }
+
         public static class RuntimeProjectileHook
         {
-            public static void Prefix(MethodBase __originalMethod, object __instance)
+            public static void Postfix(MonoBehaviour __instance)
             {
                 if (NetworkManager.Instance == null || !NetworkManager.Instance.IsConnected)
                     return;
 
-                if (__instance == null)
-                    return;
-
                 try
                 {
-                    var mono = __instance as MonoBehaviour;
-                    if (mono == null && __instance is Component c)
-                        mono = c as MonoBehaviour;
-
-                    if (mono == null)
-                        return;
-
-                    var obj = mono.gameObject;
+                    if (__instance == null) return;
+                    var obj = __instance.gameObject;
                     if (obj == null || obj.name.Contains("RemoteProjectile_") || obj.name.Contains("RemoteHeli_"))
                         return;
-
-                    if (obj.GetComponent<Raulworks.RW_Base_Projectile>() != null ||
-                        obj.GetComponent<Raulworks.RW_Gat_Projectile>() != null ||
-                        obj.GetComponent<Raulworks.RW_RocketProjectile>() != null)
-                    {
-                        MultiplayerPlugin.Log.LogInfo($"[ProjectileHook] detected local shot at {obj.name}");
-                    }
+                    NetworkManager.Instance.SendProjectileSnapshot(__instance);
                 }
                 catch (Exception ex)
                 {

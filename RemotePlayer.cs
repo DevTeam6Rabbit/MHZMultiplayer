@@ -100,10 +100,19 @@ namespace MHZombieMultiplayer
             bool active = (Time.time - _lastUpdateTime) < TimeoutSeconds;
             if (gameObject.activeSelf != active)
                 gameObject.SetActive(active);
+
+            if (_recentProjectileHits.Count > 0)
+            {
+                float cutoff = Time.time - 10f;
+                var expired = new List<int>();
+                foreach (var pair in _recentProjectileHits)
+                    if (pair.Value < cutoff) expired.Add(pair.Key);
+                foreach (int key in expired)
+                    _recentProjectileHits.Remove(key);
+            }
         }
 
-        private readonly HashSet<int> _recentProjectileHits = new HashSet<int>();
-        private readonly HashSet<int> _recentDamagePackets = new HashSet<int>();
+        private readonly Dictionary<int, float> _recentProjectileHits = new Dictionary<int, float>();
 
         private void OnTriggerEnter(Collider other)
         {
@@ -116,16 +125,12 @@ namespace MHZombieMultiplayer
             if (TryResolveProjectileHit(other, out float damage, out int projectileInstanceId))
             {
                 int hitKey = projectileInstanceId > 0 ? projectileInstanceId : other.GetInstanceID();
-                if (!_recentProjectileHits.Add(hitKey))
+                if (_recentProjectileHits.ContainsKey(hitKey))
                     return;
 
-                ApplyDamage(damage);
-                if (NetworkManager.Instance != null)
-                    NetworkManager.Instance.SendPlayerDamage(SteamId, damage, hitKey);
-            }
-            else if (other.bounds != null && other.bounds.size.magnitude > 1.5f)
-            {
-                ApplyDamage(10f);
+                // This is only shooter-side prediction for the ghost model.
+                // The target client authoritatively confirms its own hit.
+                ApplyDamage(damage, hitKey);
             }
         }
 
@@ -137,26 +142,10 @@ namespace MHZombieMultiplayer
             if (other == null)
                 return false;
 
-            if (other.GetComponentInParent<Raulworks.RW_Base_Projectile>() != null)
-            {
-                damage = 35f;
-                projectileInstanceId = other.GetComponentInParent<Raulworks.RW_Base_Projectile>().GetInstanceID();
-                return true;
-            }
-            if (other.GetComponentInParent<Raulworks.RW_Gat_Projectile>() != null)
-            {
-                damage = 35f;
-                projectileInstanceId = other.GetComponentInParent<Raulworks.RW_Gat_Projectile>().GetInstanceID();
-                return true;
-            }
-            if (other.GetComponentInParent<Raulworks.RW_RocketProjectile>() != null)
-            {
-                damage = 45f;
-                projectileInstanceId = other.GetComponentInParent<Raulworks.RW_RocketProjectile>().GetInstanceID();
-                return true;
-            }
-
-            return false;
+            if (!ProjectileHelper.IsGameProjectile(other)) return false;
+            damage = ProjectileHelper.GetDamageFromCollider(other);
+            projectileInstanceId = ProjectileHelper.GetProjectileInstanceId(other);
+            return damage > 0f;
         }
 
         private void OnCollisionEnter(Collision collision)
@@ -187,10 +176,16 @@ namespace MHZombieMultiplayer
             }
         }
 
-        public void ApplyDamage(float damage)
+        public void ApplyDamage(float damage, int projectileInstanceId = 0)
         {
             if (damage <= 0f || !IsAlive)
                 return;
+
+            if (projectileInstanceId != 0)
+            {
+                if (_recentProjectileHits.ContainsKey(projectileInstanceId)) return;
+                _recentProjectileHits[projectileInstanceId] = Time.time;
+            }
 
             Health = Mathf.Max(0f, Health - damage);
             MultiplayerPlugin.Log.LogInfo($"[RemotePlayer] {DisplayName} took {damage} damage. Health={Health}");
@@ -209,8 +204,13 @@ namespace MHZombieMultiplayer
             _targetRotation = packet.Rotation;
             _velocity = packet.Velocity;
             _lastUpdateTime = Time.time;
+            Health = Mathf.Clamp(packet.Health, 0f, LocalPlayerCombat.MaxHealth);
 
-            if (!gameObject.activeSelf)
+            if (Health <= 0f)
+            {
+                if (gameObject.activeSelf) gameObject.SetActive(false);
+            }
+            else if (!gameObject.activeSelf)
                 gameObject.SetActive(true);
         }
     }
