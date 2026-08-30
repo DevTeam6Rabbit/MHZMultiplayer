@@ -83,36 +83,10 @@ namespace MHZombieMultiplayer
 
             solidCollider.size = hitbox.size;
             solidCollider.center = hitbox.center;
-            EnsureDebugHitbox(ghost.transform, hitbox);
-
-            MultiplayerPlugin.Log.LogInfo($"[GhostHeliFactory] Remote hitbox size={hitbox.size} center={hitbox.center}");
-        }
-
-        private static void EnsureDebugHitbox(Transform ghost, BoxCollider hitbox)
-        {
-            Transform existing = ghost.Find("PvPHitboxDebug");
-            GameObject debug = existing != null ? existing.gameObject :
-                GameObject.CreatePrimitive(PrimitiveType.Cube);
-            debug.name = "PvPHitboxDebug";
-            if (existing == null)
-                debug.transform.SetParent(ghost, false);
-
-            Collider debugCollider = debug.GetComponent<Collider>();
-            if (debugCollider != null) Object.Destroy(debugCollider);
-
-            debug.transform.localPosition = hitbox.center;
-            debug.transform.localRotation = Quaternion.identity;
-            debug.transform.localScale = hitbox.size;
-
-            Renderer renderer = debug.GetComponent<Renderer>();
-            Shader shader = Shader.Find("Legacy Shaders/Transparent/Diffuse") ?? Shader.Find("Standard");
-            if (renderer != null && shader != null)
-            {
-                renderer.material = new Material(shader);
-                renderer.material.color = new Color(0f, 1f, 1f, 0.18f);
-                renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-                renderer.receiveShadows = false;
-            }
+            Vector3 effectiveSize = LocalPlayerCombat.GetEffectiveHitboxSize(
+                hitbox, RemoteProjectile.CollisionRadius);
+            MultiplayerPlugin.Log.LogInfo(
+                $"[GhostHeliFactory] Remote raw hitbox={hitbox.size}, effective swept hitbox={effectiveSize}, center={hitbox.center}");
         }
 
         public static int TryBuildVisuals(Transform ghostRoot)

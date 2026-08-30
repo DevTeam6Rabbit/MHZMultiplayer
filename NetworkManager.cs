@@ -198,6 +198,7 @@ namespace MHZombieMultiplayer
         {
             GameObject localHeli = HeliLocator.GetLocalHeli();
             if (localHeli == null) return;
+            LocalPlayerCombat combat = LocalPlayerCombat.EnsureAttached();
 
             HeliStatePacket packet = new HeliStatePacket
             {
@@ -206,8 +207,17 @@ namespace MHZombieMultiplayer
                 Position   = localHeli.transform.position,
                 Rotation   = localHeli.transform.rotation,
                 Velocity   = localHeli.GetComponent<Rigidbody>()?.velocity ?? Vector3.zero,
-                Health     = LocalPlayerCombat.EnsureAttached()?.Health ?? LocalPlayerCombat.MaxHealth,
+                Health     = combat?.Health ?? LocalPlayerCombat.MaxHealth,
             };
+
+            if (combat != null && combat.TryGetReportedHitbox(out Vector3 center,
+                out Quaternion hitboxRotation, out Vector3 hitboxSize))
+            {
+                packet.HasReportedHitbox = true;
+                packet.HitboxWorldCenter = center;
+                packet.HitboxWorldRotation = hitboxRotation;
+                packet.HitboxWorldSize = hitboxSize;
+            }
 
             byte[] data = PacketSerializer.Serialize(packet);
 

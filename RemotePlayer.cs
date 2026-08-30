@@ -224,6 +224,10 @@ namespace MHZombieMultiplayer
             _lastUpdateTime = Time.time;
             Health = Mathf.Clamp(packet.Health, 0f, LocalPlayerCombat.MaxHealth);
 
+            if (packet.HasReportedHitbox)
+                DebugTools.UpdateReportedHitboxVisual(transform, packet.HitboxWorldCenter,
+                    packet.HitboxWorldRotation, packet.HitboxWorldSize);
+
             if (Health <= 0f)
             {
                 if (gameObject.activeSelf) gameObject.SetActive(false);

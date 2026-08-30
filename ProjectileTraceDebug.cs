@@ -14,6 +14,8 @@ namespace MHZombieMultiplayer
 
         public static void RecordLocal(LocalProjectileSnapshot shot)
         {
+            if (!DebugTools.Enabled) return;
+
             string key = "local:" + shot.InstanceId;
             ProjectileTraceLine trace = GetOrCreate(key, shot.Kind, false);
             trace.Append(shot.Position);
@@ -26,12 +28,23 @@ namespace MHZombieMultiplayer
 
         public static void BeginRemote(ulong steamId, int instanceId, ProjectileKind kind, Vector3 position)
         {
+            if (!DebugTools.Enabled) return;
             GetOrCreate(RemoteKey(steamId, instanceId), kind, true).Append(position);
         }
 
         public static void RecordRemote(ulong steamId, int instanceId, ProjectileKind kind, Vector3 position)
         {
+            if (!DebugTools.Enabled) return;
             GetOrCreate(RemoteKey(steamId, instanceId), kind, true).Append(position);
+        }
+
+        public static void Clear()
+        {
+            var active = new List<ProjectileTraceLine>(Traces.Values);
+            Traces.Clear();
+            foreach (ProjectileTraceLine trace in active)
+                if (trace != null)
+                    Object.Destroy(trace.gameObject);
         }
 
         internal static void Forget(string key, ProjectileTraceLine trace)
