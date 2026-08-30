@@ -22,6 +22,11 @@ namespace MHZombieMultiplayer
         public static readonly Color BtnActive = Hex("4A4B54");
         public static readonly Color Outline   = Hex("4C4D57");
 
+        // Semi-transparent window backgrounds (low opacity so the game shows
+        // through). These match Bg / BgRaised at ~55% alpha.
+        public static readonly Color WindowBg = new Color(0.106f, 0.110f, 0.122f, 0.55f); // ~#1B1C1F
+        public static readonly Color HeaderBg = new Color(0.149f, 0.153f, 0.173f, 0.55f); // ~#26272C
+
         private static GUISkin _skin;
         private static bool _ready;
 
@@ -170,7 +175,7 @@ namespace MHZombieMultiplayer
             // This style just supplies the background + a uniform 1px border.
             return new GUIStyle
             {
-                normal = { background = Frame(Border, Bg), textColor = Text },
+                normal = { background = Frame(Border, WindowBg), textColor = Text },
                 fontSize = 13,
                 border = new RectOffset(1, 1, 1, 1),
                 padding = new RectOffset(8, 8, 8, 8)
@@ -183,7 +188,7 @@ namespace MHZombieMultiplayer
         {
             return new GUIStyle
             {
-                normal = { background = Solid(BgRaised), textColor = Text },
+                normal = { background = Solid(HeaderBg), textColor = Text },
                 fontSize = 14,
                 fontStyle = FontStyle.Bold,
                 alignment = TextAnchor.MiddleLeft,
@@ -206,7 +211,7 @@ namespace MHZombieMultiplayer
         {
             return new GUIStyle
             {
-                normal = { background = Solid(Bg) },
+                normal = { background = Solid(WindowBg) },
                 padding = new RectOffset(4, 4, 2, 2)
             };
         }

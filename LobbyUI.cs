@@ -92,21 +92,25 @@ namespace MHZombieMultiplayer
         {
             DrawWindowHeader("Time Trial Scoreboard");
 
-            LocalPlayerCombat combat = LocalPlayerCombat.EnsureAttached();
-            if (combat != null)
-            {
-                GUILayout.Label($"PvP Health: {combat.Health:F0}/{LocalPlayerCombat.MaxHealth:F0}");
-                GUILayout.Space(4);
-            }
-
+            // HP is shown by the on-screen health bar, so this panel only lists
+            // the PvP combat stats (K / D / K-D ratio).
             var pvpEntries = ScoreboardManager.GetPvPEntries();
-            if (pvpEntries.Count > 0)
+            GUILayout.Label("PvP Combat", UiTheme.Header);
+            if (pvpEntries.Count == 0)
             {
-                GUILayout.Label("PvP Combat", UiTheme.Header);
-                foreach (var entry in pvpEntries)
-                    GUILayout.Label($"{entry.Name}: K {entry.Kills} / D {entry.Deaths} | dealt {entry.DamageDealt:F0} | taken {entry.DamageTaken:F0}");
-                GUILayout.Space(8);
+                GUILayout.Label("No PvP data yet.", UiTheme.Dim);
             }
+            else
+            {
+                foreach (var entry in pvpEntries)
+                {
+                    string kd = entry.Deaths > 0
+                        ? (entry.Kills / (float)entry.Deaths).ToString("0.00")
+                        : entry.Kills.ToString("0");
+                    GUILayout.Label($"{entry.Name}   K {entry.Kills}   D {entry.Deaths}   K/D {kd}");
+                }
+            }
+            GUILayout.Space(8);
 
             GUILayout.Label("Time Trial", UiTheme.Header);
             var entries = ScoreboardManager.Entries;
