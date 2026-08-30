@@ -431,7 +431,7 @@ namespace MHZombieMultiplayer
 
             var col = go.AddComponent<SphereCollider>();
             col.isTrigger = true;
-            col.radius = 0.4f;
+            col.radius = 0.65f; // generous so fast/small bullets reliably hit the victim
 
             RemoteProjectile projectile = go.AddComponent<RemoteProjectile>();
             projectile.SteamId = sender.m_SteamID;
@@ -612,9 +612,10 @@ namespace MHZombieMultiplayer
             body.transform.SetParent(transform, false);
             UnityEngine.Object.Destroy(body.GetComponent<Collider>());
 
-            float size = Kind == ProjectileKind.Rocket ? 0.35f : Kind == ProjectileKind.Gat ? 0.10f : 0.18f;
-            Color color = Kind == ProjectileKind.Rocket ? new Color(1f, 0.22f, 0.05f) :
-                          Kind == ProjectileKind.Gat ? new Color(1f, 0.72f, 0.12f) : new Color(1f, 0.95f, 0.35f);
+            // Bigger + brighter visuals so other players' shots are actually seeable.
+            float size = Kind == ProjectileKind.Rocket ? 0.55f : Kind == ProjectileKind.Gat ? 0.30f : 0.38f;
+            Color color = Kind == ProjectileKind.Rocket ? new Color(1f, 0.35f, 0.10f) :
+                          Kind == ProjectileKind.Gat ? new Color(1f, 0.85f, 0.20f) : new Color(1f, 0.95f, 0.45f);
             body.transform.localScale = Vector3.one * size;
             Renderer renderer = body.GetComponent<Renderer>();
             Shader shader = Shader.Find("Legacy Shaders/Self-Illumin/VertexLit") ?? Shader.Find("Standard");
@@ -626,8 +627,8 @@ namespace MHZombieMultiplayer
             }
 
             TrailRenderer trail = body.AddComponent<TrailRenderer>();
-            trail.time = Kind == ProjectileKind.Rocket ? 0.35f : 0.18f;
-            trail.startWidth = size * 0.65f;
+            trail.time = Kind == ProjectileKind.Rocket ? 0.5f : 0.3f;
+            trail.startWidth = size * 0.8f;
             trail.endWidth = 0.01f;
             trail.startColor = color;
             trail.endColor = new Color(color.r, color.g, color.b, 0f);
