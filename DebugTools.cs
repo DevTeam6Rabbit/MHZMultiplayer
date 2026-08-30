@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace MHZombieMultiplayer
@@ -6,6 +7,9 @@ namespace MHZombieMultiplayer
     // so each player can choose whether debug visuals are shown on their screen.
     public static class DebugTools
     {
+        private static readonly HashSet<PvPHitboxDebugVisual> HitboxVisuals =
+            new HashSet<PvPHitboxDebugVisual>();
+
         public static bool Enabled { get; private set; }
 
         public static void Toggle()
@@ -17,14 +21,30 @@ namespace MHZombieMultiplayer
         {
             Enabled = enabled;
 
-            foreach (PvPHitboxDebugVisual visual in
-                Object.FindObjectsOfType<PvPHitboxDebugVisual>())
-                visual.SetVisible(enabled);
+            var visuals = new List<PvPHitboxDebugVisual>(HitboxVisuals);
+            foreach (PvPHitboxDebugVisual visual in visuals)
+            {
+                if (visual != null)
+                    visual.SetVisible(enabled);
+                else
+                    HitboxVisuals.Remove(visual);
+            }
 
             if (!enabled)
                 ProjectileTraceDebug.Clear();
 
             MultiplayerPlugin.Log.LogInfo($"[DebugTools] Hitboxes and projectile traces {(enabled ? "enabled" : "disabled")}.");
+        }
+
+        internal static void Register(PvPHitboxDebugVisual visual)
+        {
+            if (visual != null)
+                HitboxVisuals.Add(visual);
+        }
+
+        internal static void Unregister(PvPHitboxDebugVisual visual)
+        {
+            HitboxVisuals.Remove(visual);
         }
 
         public static void EnsureHitboxVisual(Transform parent, BoxCollider hitbox, Color color)
@@ -120,6 +140,7 @@ namespace MHZombieMultiplayer
         public void Initialize(Renderer target)
         {
             _renderer = target;
+            DebugTools.Register(this);
             SetVisible(DebugTools.Enabled);
         }
 
@@ -129,6 +150,8 @@ namespace MHZombieMultiplayer
                 _renderer = GetComponent<Renderer>();
             if (_renderer != null)
                 _renderer.enabled = visible;
+            if (gameObject.activeSelf != visible)
+                gameObject.SetActive(visible);
         }
 
         public void SetReportedWorldPose(Vector3 center, Quaternion rotation, Vector3 size)
@@ -146,7 +169,11 @@ namespace MHZombieMultiplayer
             // but it must not inherit the ghost's interpolation/extrapolation.
             if (_holdReportedWorldPose)
                 ApplyReportedWorldPose();
-            SetVisible(DebugTools.Enabled);
+        }
+
+        private void OnDestroy()
+        {
+            DebugTools.Unregister(this);
         }
 
         private void ApplyReportedWorldPose()

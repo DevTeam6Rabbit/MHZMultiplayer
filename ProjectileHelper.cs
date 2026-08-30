@@ -38,6 +38,8 @@ namespace MHZombieMultiplayer
         private static readonly Dictionary<int, ProjectileActivation> ProjectileActivations =
             new Dictionary<int, ProjectileActivation>();
         private static readonly HashSet<int> GunProjectileObjects = new HashSet<int>();
+        private static readonly Dictionary<int, float> OriginalGatTrailTimes =
+            new Dictionary<int, float>();
         private static int _nextNetworkProjectileId;
 
         private static readonly FieldInfo BaseStartTime =
@@ -113,12 +115,35 @@ namespace MHZombieMultiplayer
 
             ProjectileKind kind = thirtyMm ? ProjectileKind.Base : ProjectileKind.Gat;
             float projectileSpeed = thirtyMm ? ThirtyMmProjectileSpeed : SevenSixTwoProjectileSpeed;
+            Vector3 position = muzzle.position;
+            Quaternion rotation = muzzle.rotation;
+            Vector3 velocity = muzzle.forward * projectileSpeed;
+
+            // For 7.62, use the exact pooled object that the game just fired.
+            // Its transform includes the game's aiming correction, so the local
+            // trail and the remote PvP projectile begin on the same path.
+            if (!thirtyMm)
+            {
+                GameObject firedObject = GetJustFiredGunObject(gun, lastTube);
+                Raulworks.RW_Gat_Projectile firedProjectile = firedObject != null
+                    ? firedObject.GetComponentInChildren<Raulworks.RW_Gat_Projectile>(true)
+                    : null;
+                if (firedProjectile != null && firedProjectile.gameObject.activeInHierarchy)
+                {
+                    position = firedProjectile.transform.position;
+                    rotation = firedProjectile.transform.rotation;
+                    Rigidbody firedBody = firedProjectile.GetComponent<Rigidbody>();
+                    if (firedBody != null && firedBody.velocity.sqrMagnitude > 0.01f)
+                        velocity = firedBody.velocity;
+                }
+            }
+
             snapshot = new LocalProjectileSnapshot
             {
                 InstanceId = NextNetworkProjectileId(),
-                Position = muzzle.position,
-                Rotation = muzzle.rotation,
-                Velocity = muzzle.forward * projectileSpeed,
+                Position = position,
+                Rotation = rotation,
+                Velocity = velocity,
                 LifeSeconds = thirtyMm ? 8f : 2f,
                 Kind = kind,
                 Damage = GetDamageForKind(kind),
@@ -136,8 +161,15 @@ namespace MHZombieMultiplayer
                 return;
 
             SetGatProjectileSpeed(gun.projectile, false);
-            SetGatProjectileSpeed(ReadObjectField<GameObject>(GatlingProjectileObject1, gun), true);
-            SetGatProjectileSpeed(ReadObjectField<GameObject>(GatlingProjectileObject2, gun), true);
+            float lastTube = ReadFloatField(GatlingLastTube, gun);
+            SetGatProjectileSpeed(GetJustFiredGunObject(gun, lastTube), true);
+        }
+
+        private static GameObject GetJustFiredGunObject(Raulworks.RW_Gatling_Gun gun, float lastTube)
+        {
+            return lastTube > 0.5f
+                ? ReadObjectField<GameObject>(GatlingProjectileObject1, gun)
+                : ReadObjectField<GameObject>(GatlingProjectileObject2, gun);
         }
 
         private static void SetGatProjectileSpeed(GameObject projectileObject, bool requireActive)
@@ -156,6 +188,20 @@ namespace MHZombieMultiplayer
                     Rigidbody body = projectile.GetComponent<Rigidbody>();
                     if (body != null)
                         body.velocity = projectile.transform.forward * SevenSixTwoProjectileSpeed;
+
+                    // Preserve approximately the original visible tracer length:
+                    // distance = speed * trail time.
+                    foreach (TrailRenderer trail in projectile.GetComponentsInChildren<TrailRenderer>(true))
+                    {
+                        int id = trail.GetInstanceID();
+                        if (!OriginalGatTrailTimes.TryGetValue(id, out float originalTime))
+                        {
+                            originalTime = trail.time;
+                            OriginalGatTrailTimes[id] = originalTime;
+                        }
+                        trail.time = originalTime * ThirtyMmProjectileSpeed / SevenSixTwoProjectileSpeed;
+                        trail.Clear();
+                    }
                 }
             }
         }
