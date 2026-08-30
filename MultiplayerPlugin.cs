@@ -50,6 +50,8 @@ namespace MHZombieMultiplayer
                 DontDestroyOnLoad(uiObj);
                 uiObj.AddComponent<LobbyUI>();
                 Log.LogInfo("Step 7: LobbyUI added OK");
+                uiObj.AddComponent<Hitmarker>();
+                Log.LogInfo("Step 8: Hitmarker added OK");
             }
             catch (System.Exception ex)
             {

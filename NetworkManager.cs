@@ -403,6 +403,8 @@ namespace MHZombieMultiplayer
 
             if (packet.AttackerSteamId == SteamUser.GetSteamID().m_SteamID)
             {
+                bool killed = packet.TargetHealthAfter <= 0f;
+                Hitmarker.Show(packet.Damage, killed);
                 ScoreboardManager.ReportDamageDealt(packet.TargetSteamId, packet.Damage, packet.TargetHealthAfter <= 0f);
                 LobbyUI.Instance?.AddChatMessage($"[PvP] You hit {SteamFriends.GetFriendPersonaName(victim)} for {packet.Damage:F0}.");
                 LobbyUI.Instance?.ShowScoreboard();
