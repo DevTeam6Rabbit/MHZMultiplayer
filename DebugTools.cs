@@ -26,6 +26,41 @@ namespace MHZombieMultiplayer
 
             MultiplayerPlugin.Log.LogInfo($"[DebugTools] Hitboxes and projectile traces {(enabled ? "enabled" : "disabled")}.");
         }
+
+        public static void EnsureHitboxVisual(Transform parent, BoxCollider hitbox, Color color)
+        {
+            if (parent == null || hitbox == null) return;
+
+            Transform existing = parent.Find("PvPHitboxDebug");
+            GameObject debug = existing != null ? existing.gameObject :
+                GameObject.CreatePrimitive(PrimitiveType.Cube);
+            debug.name = "PvPHitboxDebug";
+            if (existing == null)
+                debug.transform.SetParent(parent, false);
+
+            Collider debugCollider = debug.GetComponent<Collider>();
+            if (debugCollider != null) Object.Destroy(debugCollider);
+
+            debug.transform.localPosition = hitbox.center;
+            debug.transform.localRotation = Quaternion.identity;
+            debug.transform.localScale = LocalPlayerCombat.GetEffectiveHitboxSize(
+                hitbox, RemoteProjectile.CollisionRadius);
+
+            Renderer renderer = debug.GetComponent<Renderer>();
+            Shader shader = Shader.Find("Legacy Shaders/Transparent/Diffuse") ?? Shader.Find("Standard");
+            if (renderer != null && shader != null)
+            {
+                renderer.material = new Material(shader);
+                renderer.material.color = color;
+                renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                renderer.receiveShadows = false;
+            }
+
+            PvPHitboxDebugVisual visual = debug.GetComponent<PvPHitboxDebugVisual>();
+            if (visual == null)
+                visual = debug.AddComponent<PvPHitboxDebugVisual>();
+            visual.Initialize(renderer);
+        }
     }
 
     // Keep this component active while hiding only its renderer. Unity's normal

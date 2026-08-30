@@ -87,6 +87,10 @@ namespace MHZombieMultiplayer
 
             if (hitbox.GetComponent<LocalPlayerHitbox>() == null)
                 hitbox.AddComponent<LocalPlayerHitbox>();
+
+            // Green is the authoritative receiver volume on this client.
+            DebugTools.EnsureHitboxVisual(hitbox.transform, _hitbox,
+                new Color(0.1f, 1f, 0.2f, 0.18f));
         }
 
         // Trigger callbacks alone can miss a 200 m/s projectile that crosses the
@@ -102,16 +106,26 @@ namespace MHZombieMultiplayer
             Vector3 end = hitboxTransform.InverseTransformPoint(worldEnd) - _hitbox.center;
             Vector3 direction = end - start;
 
-            Vector3 scale = hitboxTransform.lossyScale;
-            float minScale = Mathf.Max(0.0001f,
-                Mathf.Min(Mathf.Abs(scale.x), Mathf.Min(Mathf.Abs(scale.y), Mathf.Abs(scale.z))));
-            Vector3 halfSize = _hitbox.size * 0.5f + Vector3.one * (projectileRadius / minScale);
+            Vector3 halfSize = GetEffectiveHitboxSize(_hitbox, projectileRadius) * 0.5f;
 
             float enter = 0f;
             float exit = 1f;
             return ClipSegmentAxis(start.x, direction.x, halfSize.x, ref enter, ref exit) &&
                    ClipSegmentAxis(start.y, direction.y, halfSize.y, ref enter, ref exit) &&
                    ClipSegmentAxis(start.z, direction.z, halfSize.z, ref enter, ref exit);
+        }
+
+        // SegmentIntersectsHitbox tests a projectile sphere, not a zero-width
+        // ray. Its radius expands the box in local space. Debug rendering calls
+        // this same method so the shown volume cannot drift from collision math.
+        public static Vector3 GetEffectiveHitboxSize(BoxCollider hitbox, float projectileRadius)
+        {
+            if (hitbox == null) return Vector3.zero;
+
+            Vector3 scale = hitbox.transform.lossyScale;
+            float minScale = Mathf.Max(0.0001f,
+                Mathf.Min(Mathf.Abs(scale.x), Mathf.Min(Mathf.Abs(scale.y), Mathf.Abs(scale.z))));
+            return hitbox.size + Vector3.one * (2f * Mathf.Max(0f, projectileRadius) / minScale);
         }
 
         private static bool ClipSegmentAxis(float origin, float direction, float extent,
