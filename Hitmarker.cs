@@ -18,6 +18,11 @@ namespace MHZombieMultiplayer
         const float KillMarkerLife = 0.7f;
         const float NumberLife = 1.1f;
 
+        // player-adjustable, tweaked from the multiplayer panel
+        public static float Volume = 0.55f;
+        public static bool SoundEnabled = true;
+        public static int NumberSize = 22;
+
         float _shownAt = -99f;
         float _life = MarkerLife;
         bool _wasKill;
@@ -42,13 +47,19 @@ namespace MHZombieMultiplayer
             _audio = gameObject.AddComponent<AudioSource>();
             _audio.playOnAwake = false;
             _audio.spatialBlend = 0f;   // 2D, always the same volume
-            _audio.volume = 0.55f;
+            _audio.volume = Volume;
 
             _hitClip    = MakeClick(1400f, 0.045f, 0.35f);   // 7.62 / light hit
             _bigHitClip = MakeClick(900f,  0.075f, 0.5f);    // 30mm / rocket
             _killClip   = MakeKillChime();
 
             MultiplayerPlugin.Log.LogInfo("[Hitmarker] Ready.");
+        }
+
+        /// Fires a sample hit so settings changes can be previewed.
+        public static void Preview()
+        {
+            Instance?.ShowInternal(20f, false);
         }
 
         /// Call when a hit on another player is confirmed.
@@ -75,12 +86,12 @@ namespace MHZombieMultiplayer
             });
             if (_numbers.Count > 12) _numbers.RemoveAt(0);
 
-            if (_audio != null)
+            if (_audio != null && SoundEnabled && Volume > 0.001f)
             {
                 AudioClip clip = killed ? _killClip : (damage >= 18f ? _bigHitClip : _hitClip);
                 // slight pitch jitter so repeated hits don't sound robotic
                 _audio.pitch = killed ? 1f : Random.Range(0.94f, 1.06f);
-                _audio.PlayOneShot(clip);
+                _audio.PlayOneShot(clip, Volume);
             }
         }
 
@@ -113,7 +124,7 @@ namespace MHZombieMultiplayer
 
             GUIStyle style = new GUIStyle(GUI.skin.label)
             {
-                fontSize = 18,
+                fontSize = Mathf.Clamp(NumberSize, 10, 60),
                 fontStyle = FontStyle.Bold,
                 alignment = TextAnchor.MiddleCenter,
             };
@@ -127,11 +138,18 @@ namespace MHZombieMultiplayer
                 float t = nAge / NumberLife;
                 float alpha = 1f - t;
                 float rise = 34f * t;
-                Rect r = new Rect(cx + n.X - 40f, cy + n.Y - 34f - rise, 80f, 24f);
+                float w = style.fontSize * 4f;
+                float hgt = style.fontSize * 1.6f;
+                Rect r = new Rect(cx + n.X - w * 0.5f, cy + n.Y - 34f - rise, w, hgt);
 
-                // drop shadow first so numbers read against a bright sky
-                style.normal.textColor = new Color(0f, 0f, 0f, alpha * 0.7f);
-                GUI.Label(new Rect(r.x + 1f, r.y + 1f, r.width, r.height), n.Text, style);
+                // outline in all 4 directions, not a single drop shadow - reads
+                // as genuinely bold against bright sky and light terrain
+                float o = Mathf.Max(1f, style.fontSize / 14f);
+                style.normal.textColor = new Color(0f, 0f, 0f, alpha * 0.85f);
+                GUI.Label(new Rect(r.x - o, r.y, r.width, r.height), n.Text, style);
+                GUI.Label(new Rect(r.x + o, r.y, r.width, r.height), n.Text, style);
+                GUI.Label(new Rect(r.x, r.y - o, r.width, r.height), n.Text, style);
+                GUI.Label(new Rect(r.x, r.y + o, r.width, r.height), n.Text, style);
 
                 style.normal.textColor = n.Kill
                     ? new Color(1f, 0.3f, 0.25f, alpha)
