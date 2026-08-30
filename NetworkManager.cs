@@ -33,6 +33,11 @@ namespace MHZombieMultiplayer
         private readonly HashSet<ProjectileKind> _loggedSentProjectileKinds = new HashSet<ProjectileKind>();
         private readonly HashSet<ProjectileKind> _loggedReceivedProjectileKinds = new HashSet<ProjectileKind>();
 
+        // Logs the first received ProjectileState packet per sender+instance so
+        // a short test shows exactly which remote projectiles actually arrive.
+        private readonly System.Collections.Generic.HashSet<string> _loggedProjectilePackets =
+            new System.Collections.Generic.HashSet<string>();
+
         // 20/sec is plenty, the lerp on the receiving side smooths the rest.
         // careful raising it - everyone sends to everyone, so it's n^2.
         private const float SendRate = 0.05f; // 20 times/sec
@@ -340,6 +345,10 @@ namespace MHZombieMultiplayer
                 MultiplayerPlugin.Log.LogInfo($"[Projectile] First received {packet.Kind} shot: damage={packet.Damage}, id={packet.InstanceId}");
 
             string key = sender.m_SteamID + ":" + packet.InstanceId;
+
+            if (_loggedProjectilePackets.Add(key))
+                MultiplayerPlugin.Log.LogInfo($"[PvP-Rx] kind={packet.Kind} dmg={packet.Damage:F0} from={SteamFriends.GetFriendPersonaName(sender)}");
+
             if (!_remoteProjectiles.TryGetValue(key, out RemoteProjectile projectile))
             {
                 projectile = SpawnRemoteProjectile(sender, packet);
@@ -438,6 +447,9 @@ namespace MHZombieMultiplayer
             rb.useGravity = false;
             rb.isKinematic = true;
             rb.detectCollisions = true;
+            // Fast bullets (7.62) can tunnel through the victim's hitbox between
+            // frames with discrete detection; continuous mode closes that gap.
+            rb.collisionDetectionMode = CollisionDetectionMode.Continuous;
 
             var col = go.AddComponent<SphereCollider>();
             col.isTrigger = true;
@@ -624,7 +636,7 @@ namespace MHZombieMultiplayer
             UnityEngine.Object.Destroy(body.GetComponent<Collider>());
 
             // Bigger + brighter visuals so other players' shots are actually seeable.
-            float size = Kind == ProjectileKind.Rocket ? 0.55f : Kind == ProjectileKind.Gat ? 0.30f : 0.38f;
+            float size = Kind == ProjectileKind.Rocket ? 0.55f : Kind == ProjectileKind.Gat ? 0.35f : 0.38f;
             Color color = Kind == ProjectileKind.Rocket ? new Color(1f, 0.35f, 0.10f) :
                           Kind == ProjectileKind.Gat ? new Color(1f, 0.85f, 0.20f) : new Color(1f, 0.95f, 0.45f);
             body.transform.localScale = Vector3.one * size;
@@ -638,7 +650,7 @@ namespace MHZombieMultiplayer
             }
 
             TrailRenderer trail = body.AddComponent<TrailRenderer>();
-            trail.time = Kind == ProjectileKind.Rocket ? 0.5f : 0.3f;
+            trail.time = Kind == ProjectileKind.Rocket ? 0.5f : 0.45f;
             trail.startWidth = size * 0.8f;
             trail.endWidth = 0.01f;
             trail.startColor = color;

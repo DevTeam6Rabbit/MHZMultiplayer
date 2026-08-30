@@ -47,6 +47,13 @@ namespace MHZombieMultiplayer
             typeof(Raulworks.RW_RocketProjectile).GetField("startTime",
                 BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
 
+        // First-seen-per-instance logging so a short test produces a readable
+        // [PvP-Snap]/[PvP-Hit] trail without spamming hundreds of lines.
+        private static readonly System.Collections.Generic.HashSet<int> _loggedSnapshots =
+            new System.Collections.Generic.HashSet<int>();
+        private static readonly System.Collections.Generic.HashSet<int> _loggedHits =
+            new System.Collections.Generic.HashSet<int>();
+
         private static readonly FieldInfo GatlingLastTube =
             typeof(Raulworks.RW_Gatling_Gun).GetField("lastTube",
                 BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
@@ -109,7 +116,7 @@ namespace MHZombieMultiplayer
             if (!go.activeInHierarchy || go.name.Contains("RemoteProjectile_"))
                 return false;
 
-            var rb = go.GetComponent<Rigidbody>();
+            Vector3 velocity = ReadProjectileVelocity(projectile, go);
             ProjectileKind kind;
             float lifeSeconds;
             float damage;
@@ -151,12 +158,50 @@ namespace MHZombieMultiplayer
                 InstanceId = GetNetworkProjectileId(go.GetInstanceID(), activationTime),
                 Position = go.transform.position,
                 Rotation = go.transform.rotation,
-                Velocity = rb != null ? rb.velocity : Vector3.zero,
+                Velocity = velocity,
                 LifeSeconds = lifeSeconds,
                 Kind = kind,
                 Damage = damage,
             };
+
+            if (_loggedSnapshots.Add(go.GetInstanceID()))
+                MultiplayerPlugin.Log.LogInfo($"[PvP-Snap] {go.name} kind={kind} dmg={damage:F0} speed={velocity.magnitude:F1} life={lifeSeconds:F2}");
             return true;
+        }
+
+        // The Rigidbody is normally on the projectile root, but the gun can
+        // wire it up via the serialized `rb` field instead. Try both so remote
+        // 7.62 visuals get the real velocity and travel to the target rather
+        // than sitting still at the muzzle (invisible + never reaching you).
+        private static Vector3 ReadProjectileVelocity(MonoBehaviour projectile, GameObject go)
+        {
+            Rigidbody rb = go.GetComponent<Rigidbody>();
+            if (rb == null)
+                rb = go.GetComponentInChildren<Rigidbody>();
+            if (rb == null)
+            {
+                try
+                {
+                    FieldInfo field = projectile.GetType().GetField("rb",
+                        BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                    if (field != null && field.GetValue(projectile) is Rigidbody fieldRb)
+                        rb = fieldRb;
+                }
+                catch { /* reflection only; fall through */ }
+            }
+
+            Vector3 vel = rb != null ? rb.velocity : Vector3.zero;
+            if (vel.sqrMagnitude > 0.001f)
+                return vel;
+
+            // At the instant of fire the Rigidbody may not have velocity yet.
+            // Derive it from the projectile's own speed field + facing direction
+            // so remote bullets always travel forward and actually reach you.
+            float speed = SafeFloatValue(projectile, "projectileSpeed");
+            if (speed > 0f)
+                return projectile.transform.forward * speed;
+
+            return vel;
         }
 
         public static float GetDamageFromCollider(Collider other)
@@ -165,19 +210,33 @@ namespace MHZombieMultiplayer
 
             var baseProj = other.GetComponentInParent<Raulworks.RW_Base_Projectile>();
             if (baseProj != null)
+            {
+                LogHit(other, "Base", ThirtyMmDamage);
                 return ThirtyMmDamage; // 30mm cannon (RW_Base_Projectile)
+            }
 
             if (other.GetComponentInParent<Raulworks.RW_Gat_Projectile>() != null)
+            {
+                LogHit(other, "Gat", SevenSixTwoDamage);
                 return SevenSixTwoDamage; // 7.62 minigun (RW_Gat_Projectile)
+            }
 
             var rocketProj = other.GetComponentInParent<Raulworks.RW_RocketProjectile>();
             if (rocketProj != null)
             {
                 float damage = SafeFloatValue(rocketProj, "damageAmount", "damage", "explosionDamage");
-                return damage > 0f ? damage : DefaultRocketDamage;
+                if (damage <= 0f) damage = DefaultRocketDamage;
+                LogHit(other, "Rocket", damage);
+                return damage;
             }
 
             return 0f;
+        }
+
+        private static void LogHit(Collider other, string kindName, float damage)
+        {
+            if (other == null || !_loggedHits.Add(other.GetInstanceID())) return;
+            MultiplayerPlugin.Log.LogInfo($"[PvP-Hit] {other.name} -> {kindName} dmg={damage:F0}");
         }
 
         public static int GetProjectileInstanceId(Collider other)

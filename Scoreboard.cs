@@ -88,6 +88,9 @@ namespace MHZombieMultiplayer
             Entries.Add(new ScoreEntry { Name = name, TimeSeconds = timeSeconds });
             Entries.Sort((a, b) => a.TimeSeconds.CompareTo(b.TimeSeconds));
             if (Entries.Count > 20) Entries.RemoveAt(Entries.Count - 1);
+
+            // save to disk / push to the website leaderboard
+            LeaderboardPublisher.OnResultsChanged();
         }
 
         public static void Clear()
