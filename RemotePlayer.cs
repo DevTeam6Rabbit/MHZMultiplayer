@@ -25,6 +25,14 @@ namespace MHZombieMultiplayer
         // Name label above the heli
         private TextMesh _nameLabel;
 
+        // Health bar above the heli (billboarded like the name label)
+        private Transform _healthBarAnchor;
+        private Transform _healthBarFill;
+        private Renderer _healthBarFillRenderer;
+        private static readonly Color HealthBarBg = new Color(0f, 0f, 0f, 0.6f);
+        private static readonly Color HealthBarEmpty = new Color(1f, 0.2f, 0.15f, 1f);
+        private static readonly Color HealthBarFull = new Color(0.3f, 1f, 0.4f, 1f);
+
         private float _lastUpdateTime;
         private const float TimeoutSeconds = 5f; // hide heli if no updates for 5s
 
@@ -71,6 +79,8 @@ namespace MHZombieMultiplayer
             labelObj.transform.localPosition = new Vector3(0f, 5.5f, 0f);
             labelObj.transform.localScale = Vector3.one * 0.5f;
 
+            CreateHealthBar();
+
             // If the factory managed a real copy at spawn, there's no placeholder
             _visualsBuilt = transform.Find("PlaceholderBox") == null;
 
@@ -80,6 +90,56 @@ namespace MHZombieMultiplayer
                 cc.isTrigger = true;
                 cc.size = new Vector3(Mathf.Max(cc.size.x, 2f), Mathf.Max(cc.size.y, 1.5f), Mathf.Max(cc.size.z, 2.5f));
             }
+        }
+
+        private void CreateHealthBar()
+        {
+            GameObject anchor = new GameObject("HealthBar");
+            anchor.transform.SetParent(transform, false);
+            anchor.transform.localPosition = new Vector3(0f, 4.9f, 0f);
+            anchor.transform.localScale = Vector3.one * 0.5f;
+            _healthBarAnchor = anchor.transform;
+
+            GameObject bg = GameObject.CreatePrimitive(PrimitiveType.Quad);
+            bg.name = "HealthBarBg";
+            bg.transform.SetParent(anchor.transform, false);
+            if (bg.GetComponent<Collider>() != null) Destroy(bg.GetComponent<Collider>());
+            bg.transform.localPosition = Vector3.zero;
+            bg.transform.localScale = new Vector3(2f, 0.4f, 1f);
+            SetQuadColor(bg, HealthBarBg);
+
+            GameObject fill = GameObject.CreatePrimitive(PrimitiveType.Quad);
+            fill.name = "HealthBarFill";
+            fill.transform.SetParent(anchor.transform, false);
+            if (fill.GetComponent<Collider>() != null) Destroy(fill.GetComponent<Collider>());
+            _healthBarFill = fill.transform;
+            _healthBarFillRenderer = fill.GetComponent<Renderer>();
+
+            UpdateHealthBar();
+        }
+
+        private void UpdateHealthBar()
+        {
+            if (_healthBarFill == null || _healthBarFillRenderer == null)
+                return;
+
+            float fraction = Mathf.Clamp01(Health / LocalPlayerCombat.MaxHealth);
+            float width = 2f * fraction;
+            _healthBarFill.localScale = new Vector3(Mathf.Max(0.0001f, width), 0.4f, 1f);
+            _healthBarFill.localPosition = new Vector3(-1f + fraction * 1f, 0f, 0.01f);
+            _healthBarFillRenderer.material.color = Color.Lerp(HealthBarEmpty, HealthBarFull, fraction);
+        }
+
+        private static void SetQuadColor(GameObject go, Color color)
+        {
+            Renderer renderer = go.GetComponent<Renderer>();
+            if (renderer == null) return;
+            Shader shader = Shader.Find("Legacy Shaders/Transparent/Diffuse") ?? Shader.Find("Standard");
+            if (shader == null) return;
+            renderer.material = new Material(shader);
+            renderer.material.color = color;
+            renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            renderer.receiveShadows = false;
         }
 
         private void Update()
@@ -112,6 +172,12 @@ namespace MHZombieMultiplayer
                 _nameLabel.transform.rotation = Quaternion.LookRotation(
                     _nameLabel.transform.position - Camera.main.transform.position);
             }
+
+            // Update + billboard the health bar above the heli
+            UpdateHealthBar();
+            if (_healthBarAnchor != null && Camera.main != null)
+                _healthBarAnchor.rotation = Quaternion.LookRotation(
+                    _healthBarAnchor.position - Camera.main.transform.position);
 
             // Hide if we haven't heard from this player in a while
             bool active = (Time.time - _lastUpdateTime) < TimeoutSeconds;
