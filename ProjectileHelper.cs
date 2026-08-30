@@ -20,6 +20,10 @@ namespace MHZombieMultiplayer
         public const float ThirtyMmDamage = 20f;
         public const float SevenSixTwoDamage = 10f;
         public const float DefaultRocketDamage = 50f;
+        // U.S. Army M80 linked ammunition for the M134 Minigun is listed at
+        // 2,750 ft/s, or 838.2 m/s. Keep the rounded gameplay value in one place.
+        public const float SevenSixTwoProjectileSpeed = 838f;
+        public const float ThirtyMmProjectileSpeed = 200f;
 
         // MH-Zombie pools and reuses projectile GameObjects. GetInstanceID()
         // therefore identifies the pooled object, not an individual shot. Keep
@@ -108,17 +112,52 @@ namespace MHZombieMultiplayer
                 muzzle = gun.muzzlePos != null ? gun.muzzlePos : gun.transform;
 
             ProjectileKind kind = thirtyMm ? ProjectileKind.Base : ProjectileKind.Gat;
+            float projectileSpeed = thirtyMm ? ThirtyMmProjectileSpeed : SevenSixTwoProjectileSpeed;
             snapshot = new LocalProjectileSnapshot
             {
                 InstanceId = NextNetworkProjectileId(),
                 Position = muzzle.position,
                 Rotation = muzzle.rotation,
-                Velocity = muzzle.forward * 200f,
+                Velocity = muzzle.forward * projectileSpeed,
                 LifeSeconds = thirtyMm ? 8f : 2f,
                 Kind = kind,
                 Damage = GetDamageForKind(kind),
             };
             return true;
+        }
+
+        // HandleProjectile activates pooled rounds before its Harmony postfix.
+        // Update both the prefab setting and the just-activated Rigidbody so
+        // local visuals use the same speed sent to remote clients immediately.
+        public static void ApplySevenSixTwoSpeed(Raulworks.RW_Gatling_Gun gun)
+        {
+            if (gun == null || gun.thirtyMM ||
+                ReadObjectField<GameObject>(GatlingCurrentProjectile, gun) != gun.projectile)
+                return;
+
+            SetGatProjectileSpeed(gun.projectile, false);
+            SetGatProjectileSpeed(ReadObjectField<GameObject>(GatlingProjectileObject1, gun), true);
+            SetGatProjectileSpeed(ReadObjectField<GameObject>(GatlingProjectileObject2, gun), true);
+        }
+
+        private static void SetGatProjectileSpeed(GameObject projectileObject, bool requireActive)
+        {
+            if (projectileObject == null || (requireActive && !projectileObject.activeInHierarchy))
+                return;
+
+            foreach (Raulworks.RW_Gat_Projectile projectile in
+                projectileObject.GetComponentsInChildren<Raulworks.RW_Gat_Projectile>(true))
+            {
+                if (projectile == null) continue;
+                projectile.projectileSpeed = SevenSixTwoProjectileSpeed;
+
+                if (requireActive)
+                {
+                    Rigidbody body = projectile.GetComponent<Rigidbody>();
+                    if (body != null)
+                        body.velocity = projectile.transform.forward * SevenSixTwoProjectileSpeed;
+                }
+            }
         }
 
         public static bool TrySnapshot(MonoBehaviour projectile, out LocalProjectileSnapshot snapshot)
