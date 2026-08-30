@@ -453,7 +453,7 @@ namespace MHZombieMultiplayer
 
             var col = go.AddComponent<SphereCollider>();
             col.isTrigger = true;
-            col.radius = 0.65f; // generous so fast/small bullets reliably hit the victim
+            col.radius = RemoteProjectile.CollisionRadius;
 
             RemoteProjectile projectile = go.AddComponent<RemoteProjectile>();
             projectile.SteamId = sender.m_SteamID;
@@ -508,12 +508,15 @@ namespace MHZombieMultiplayer
                 MultiplayerPlugin.Log.LogInfo($"[Projectile] First sent {state.Kind} shot: damage={state.Damage}, id={state.InstanceId}");
 
             byte[] data = PacketSerializer.Serialize(state);
+            EP2PSend sendMode = state.Kind == ProjectileKind.Rocket
+                ? EP2PSend.k_EP2PSendUnreliable
+                : EP2PSend.k_EP2PSendReliable;
             int count = SteamMatchmaking.GetNumLobbyMembers(LobbyId);
             for (int i = 0; i < count; i++)
             {
                 CSteamID member = SteamMatchmaking.GetLobbyMemberByIndex(LobbyId, i);
                 if (member != SteamUser.GetSteamID())
-                    SteamNetworking.SendP2PPacket(member, data, (uint)data.Length, EP2PSend.k_EP2PSendUnreliable, Channel);
+                    SteamNetworking.SendP2PPacket(member, data, (uint)data.Length, sendMode, Channel);
             }
         }
 
@@ -566,6 +569,8 @@ namespace MHZombieMultiplayer
 
     public class RemoteProjectile : MonoBehaviour
     {
+        public const float CollisionRadius = 0.65f;
+
         public ulong SteamId;
         public int InstanceId;
         public ProjectileKind Kind;
@@ -599,6 +604,7 @@ namespace MHZombieMultiplayer
             }
 
             _lifeSeconds -= Time.deltaTime;
+            Vector3 previousPosition = transform.position;
             // Continue from the latest velocity between packet snapshots, then
             // apply a gentle correction when the next snapshot arrives.
             transform.position += _velocity * Time.deltaTime;
@@ -608,6 +614,14 @@ namespace MHZombieMultiplayer
             _targetPosition += _velocity * Time.deltaTime;
             transform.position = Vector3.Lerp(transform.position, _targetPosition, 10f * Time.deltaTime);
             transform.rotation = Quaternion.Slerp(transform.rotation, _targetRotation, 20f * Time.deltaTime);
+
+            if (!_hasHit)
+            {
+                LocalPlayerCombat local = LocalPlayerCombat.EnsureAttached();
+                if (local != null && local.SegmentIntersectsHitbox(
+                    previousPosition, transform.position, CollisionRadius))
+                    TryHitLocalPlayer(local);
+            }
 
             if (_lifeSeconds <= 0f && gameObject != null)
                 Destroy(gameObject);

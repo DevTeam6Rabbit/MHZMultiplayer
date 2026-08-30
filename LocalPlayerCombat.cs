@@ -10,10 +10,13 @@ namespace MHZombieMultiplayer
     public sealed class LocalPlayerCombat : MonoBehaviour
     {
         public const float MaxHealth = 100f;
+        public static readonly Vector3 PvPHitboxSize = new Vector3(4.5f, 3f, 7f);
+        public static readonly Vector3 PvPHitboxCenter = new Vector3(0f, 1f, 0f);
 
         private readonly Dictionary<string, float> _receivedProjectiles = new Dictionary<string, float>();
         private readonly List<BehaviourState> _disabledBehaviours = new List<BehaviourState>();
         private Rigidbody _rigidbody;
+        private BoxCollider _hitbox;
 
         public float Health { get; private set; } = MaxHealth;
         public bool IsAlive => Health > 0f;
@@ -54,14 +57,60 @@ namespace MHZombieMultiplayer
             if (existing == null)
                 hitbox.transform.SetParent(transform, false);
 
-            var collider = hitbox.GetComponent<BoxCollider>();
-            if (collider == null) collider = hitbox.AddComponent<BoxCollider>();
-            collider.isTrigger = true;
-            collider.size = new Vector3(3.5f, 2.2f, 5.5f);
-            collider.center = new Vector3(0f, 1f, 0f);
+            _hitbox = hitbox.GetComponent<BoxCollider>();
+            if (_hitbox == null) _hitbox = hitbox.AddComponent<BoxCollider>();
+            _hitbox.isTrigger = true;
+            _hitbox.size = PvPHitboxSize;
+            _hitbox.center = PvPHitboxCenter;
 
             if (hitbox.GetComponent<LocalPlayerHitbox>() == null)
                 hitbox.AddComponent<LocalPlayerHitbox>();
+        }
+
+        // Trigger callbacks alone can miss a 200 m/s projectile that crosses the
+        // entire box between physics ticks. Test the whole travelled segment
+        // against this oriented box, expanded by the projectile radius.
+        public bool SegmentIntersectsHitbox(Vector3 worldStart, Vector3 worldEnd, float projectileRadius)
+        {
+            if (_hitbox == null || !_hitbox.enabled || !_hitbox.gameObject.activeInHierarchy)
+                return false;
+
+            Transform hitboxTransform = _hitbox.transform;
+            Vector3 start = hitboxTransform.InverseTransformPoint(worldStart) - _hitbox.center;
+            Vector3 end = hitboxTransform.InverseTransformPoint(worldEnd) - _hitbox.center;
+            Vector3 direction = end - start;
+
+            Vector3 scale = hitboxTransform.lossyScale;
+            float minScale = Mathf.Max(0.0001f,
+                Mathf.Min(Mathf.Abs(scale.x), Mathf.Min(Mathf.Abs(scale.y), Mathf.Abs(scale.z))));
+            Vector3 halfSize = _hitbox.size * 0.5f + Vector3.one * (projectileRadius / minScale);
+
+            float enter = 0f;
+            float exit = 1f;
+            return ClipSegmentAxis(start.x, direction.x, halfSize.x, ref enter, ref exit) &&
+                   ClipSegmentAxis(start.y, direction.y, halfSize.y, ref enter, ref exit) &&
+                   ClipSegmentAxis(start.z, direction.z, halfSize.z, ref enter, ref exit);
+        }
+
+        private static bool ClipSegmentAxis(float origin, float direction, float extent,
+            ref float enter, ref float exit)
+        {
+            if (Mathf.Abs(direction) < 0.000001f)
+                return origin >= -extent && origin <= extent;
+
+            float inverse = 1f / direction;
+            float first = (-extent - origin) * inverse;
+            float second = (extent - origin) * inverse;
+            if (first > second)
+            {
+                float swap = first;
+                first = second;
+                second = swap;
+            }
+
+            enter = Mathf.Max(enter, first);
+            exit = Mathf.Min(exit, second);
+            return enter <= exit;
         }
 
         public bool ReceiveRemoteHit(ulong attackerId, int projectileInstanceId, float damage, ProjectileKind kind)
