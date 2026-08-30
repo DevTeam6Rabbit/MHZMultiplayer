@@ -48,6 +48,7 @@ namespace MHZombieMultiplayer
         {
             _rigidbody = GetComponent<Rigidbody>();
             EnsureHitbox();
+            RefillAllAmmo();
             ActivateSpawnProtection();
             MultiplayerPlugin.Log.LogInfo("[PvP] Local helicopter combat receiver ready (100 health).");
         }
@@ -174,6 +175,7 @@ namespace MHZombieMultiplayer
         {
             Health = MaxHealth;
             _receivedProjectiles.Clear();
+            RefillAllAmmo();
             ActivateSpawnProtection();
 
             foreach (var bs in _disabledBehaviours)
@@ -193,6 +195,75 @@ namespace MHZombieMultiplayer
             _spawnProtectedUntil = Time.time + SpawnProtectionSeconds;
             _loggedProtectedHit = false;
             MultiplayerPlugin.Log.LogInfo($"[PvP] Spawn protection active for {SpawnProtectionSeconds:F0} seconds.");
+        }
+
+        private void RefillAllAmmo()
+        {
+            Transform heliRoot = transform.root;
+            if (heliRoot == null) return;
+
+            int refilled = 0;
+
+            foreach (Raulworks.RW_Base_Weapon weapon in
+                heliRoot.GetComponentsInChildren<Raulworks.RW_Base_Weapon>(true))
+            {
+                if (weapon == null) continue;
+                weapon.currentAmmoCount = weapon.maxAmmoCount;
+                SetInactive(weapon.outOfAmmoMessage);
+                TryRefreshAmmoDisplay(weapon.Reloaded, weapon.GetType().Name);
+                refilled++;
+            }
+
+            foreach (Raulworks.RW_Thirty_MM weapon in
+                heliRoot.GetComponentsInChildren<Raulworks.RW_Thirty_MM>(true))
+            {
+                if (weapon == null) continue;
+                weapon.currentAmmoCount = weapon.maxAmmoCount;
+                SetInactive(weapon.outOfAmmo);
+                TryRefreshAmmoDisplay(weapon.Reloaded, nameof(Raulworks.RW_Thirty_MM));
+                refilled++;
+            }
+
+            foreach (Raulworks.RW_Rocket_Launcher weapon in
+                heliRoot.GetComponentsInChildren<Raulworks.RW_Rocket_Launcher>(true))
+            {
+                if (weapon == null) continue;
+                weapon.currentAmmoCount = weapon.maxAmmoCount;
+                SetInactive(weapon.outOfAmmo);
+                TryRefreshAmmoDisplay(weapon.Reloaded, nameof(Raulworks.RW_Rocket_Launcher));
+                refilled++;
+            }
+
+            foreach (Raulworks.RW_MineLayer weapon in
+                heliRoot.GetComponentsInChildren<Raulworks.RW_MineLayer>(true))
+            {
+                if (weapon == null) continue;
+                weapon.currentAmmoCount = weapon.maxAmmoCount;
+                SetInactive(weapon.outOfAmmo);
+                TryRefreshAmmoDisplay(weapon.Reloaded, nameof(Raulworks.RW_MineLayer));
+                refilled++;
+            }
+
+            MultiplayerPlugin.Log.LogInfo($"[PvP] Refilled {refilled} weapon ammo stores on spawn/reset.");
+        }
+
+        private static void SetInactive(GameObject obj)
+        {
+            if (obj != null) obj.SetActive(false);
+        }
+
+        private static void TryRefreshAmmoDisplay(Action refresh, string weaponName)
+        {
+            try
+            {
+                refresh?.Invoke();
+            }
+            catch (Exception ex)
+            {
+                // Ammo is already refilled; a missing/inactive HUD reference
+                // should not prevent the respawn itself from completing.
+                MultiplayerPlugin.Log.LogWarning($"[PvP] {weaponName} ammo HUD refresh failed: {ex.Message}");
+            }
         }
 
         private void Eliminate()
