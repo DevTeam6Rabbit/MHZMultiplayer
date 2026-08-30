@@ -251,7 +251,7 @@ namespace MHZombieMultiplayer
             const int barWidth = 240;
             const int barHeight = 18;
             const int gap = 10;
-            const int labelWidth = 110;
+            const int labelWidth = 150;
             const int marginBottom = 28;
 
             float hp = Mathf.Clamp(combat.Health, 0f, LocalPlayerCombat.MaxHealth);
@@ -270,7 +270,10 @@ namespace MHZombieMultiplayer
             UiTheme.DrawRect(fill, hpColor);
 
             Rect labelRect = new Rect(back.x + barWidth + gap, y, labelWidth, barHeight);
-            GUI.Label(labelRect, $"HP {hp:F0}/{LocalPlayerCombat.MaxHealth:F0}");
+            string status = combat.IsSpawnProtected
+                ? $"SHIELD {combat.SpawnProtectionRemaining:F1}s"
+                : $"HP {hp:F0}/{LocalPlayerCombat.MaxHealth:F0}";
+            GUI.Label(labelRect, status);
         }
 
         private static void SectionSpace() => GUILayout.Space(8);

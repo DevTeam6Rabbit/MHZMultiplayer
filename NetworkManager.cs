@@ -111,6 +111,7 @@ namespace MHZombieMultiplayer
             LobbyId = new CSteamID(cb.m_ulSteamIDLobby);
             IsHost = true;
             IsConnected = true;
+            LocalPlayerCombat.EnsureAttached()?.ActivateSpawnProtection();
 
             // Tag the lobby so other mods/players can find it
             SteamMatchmaking.SetLobbyData(LobbyId, "game", "MHZombie");
@@ -136,6 +137,7 @@ namespace MHZombieMultiplayer
         {
             LobbyId = new CSteamID(cb.m_ulSteamIDLobby);
             IsConnected = true;
+            LocalPlayerCombat.EnsureAttached()?.ActivateSpawnProtection();
 
             // Determine role
             CSteamID owner = SteamMatchmaking.GetLobbyOwner(LobbyId);

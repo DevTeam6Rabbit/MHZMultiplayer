@@ -10,16 +10,28 @@ namespace MHZombieMultiplayer
     public sealed class LocalPlayerCombat : MonoBehaviour
     {
         public const float MaxHealth = 100f;
-        public static readonly Vector3 PvPHitboxSize = new Vector3(4.5f, 3f, 7f);
-        public static readonly Vector3 PvPHitboxCenter = new Vector3(0f, 1f, 0f);
+        public const float SpawnProtectionSeconds = 10f;
+
+        private const float BaseHitboxHeight = 3f;
+        private const float ExtraTopHeight = BaseHitboxHeight * 0.4f;
+        // Add the requested 40% entirely above the old box: its bottom remains
+        // fixed while height grows from 3.0 to 4.2 and center rises by 0.6.
+        public static readonly Vector3 PvPHitboxSize =
+            new Vector3(4.5f, BaseHitboxHeight + ExtraTopHeight, 7f);
+        public static readonly Vector3 PvPHitboxCenter =
+            new Vector3(0f, 1f + ExtraTopHeight * 0.5f, 0f);
 
         private readonly Dictionary<string, float> _receivedProjectiles = new Dictionary<string, float>();
         private readonly List<BehaviourState> _disabledBehaviours = new List<BehaviourState>();
         private Rigidbody _rigidbody;
         private BoxCollider _hitbox;
+        private float _spawnProtectedUntil;
+        private bool _loggedProtectedHit;
 
         public float Health { get; private set; } = MaxHealth;
         public bool IsAlive => Health > 0f;
+        public bool IsSpawnProtected => Time.time < _spawnProtectedUntil;
+        public float SpawnProtectionRemaining => Mathf.Max(0f, _spawnProtectedUntil - Time.time);
 
         public static LocalPlayerCombat EnsureAttached()
         {
@@ -36,6 +48,7 @@ namespace MHZombieMultiplayer
         {
             _rigidbody = GetComponent<Rigidbody>();
             EnsureHitbox();
+            ActivateSpawnProtection();
             MultiplayerPlugin.Log.LogInfo("[PvP] Local helicopter combat receiver ready (100 health).");
         }
 
@@ -118,11 +131,25 @@ namespace MHZombieMultiplayer
             if (!IsAlive || attackerId == SteamUser.GetSteamID().m_SteamID)
                 return false;
 
-            damage = ProjectileHelper.GetDamageForKind(kind);
-            if (damage <= 0f)
-                return false;
             string key = attackerId + ":" + projectileInstanceId;
             if (_receivedProjectiles.ContainsKey(key))
+                return false;
+
+            // Consume the projectile so it cannot remain inside the box and deal
+            // damage on the first frame after protection expires.
+            if (IsSpawnProtected)
+            {
+                _receivedProjectiles[key] = Time.time;
+                if (!_loggedProtectedHit)
+                {
+                    _loggedProtectedHit = true;
+                    MultiplayerPlugin.Log.LogInfo($"[PvP] Spawn protection blocked {kind} shot ({SpawnProtectionRemaining:F1}s remaining).");
+                }
+                return true;
+            }
+
+            damage = ProjectileHelper.GetDamageForKind(kind);
+            if (damage <= 0f)
                 return false;
             _receivedProjectiles[key] = Time.time;
 
@@ -147,6 +174,7 @@ namespace MHZombieMultiplayer
         {
             Health = MaxHealth;
             _receivedProjectiles.Clear();
+            ActivateSpawnProtection();
 
             foreach (var bs in _disabledBehaviours)
                 if (bs.Behaviour != null)
@@ -158,6 +186,13 @@ namespace MHZombieMultiplayer
 
             if (!gameObject.activeSelf)
                 gameObject.SetActive(true);
+        }
+
+        public void ActivateSpawnProtection()
+        {
+            _spawnProtectedUntil = Time.time + SpawnProtectionSeconds;
+            _loggedProtectedHit = false;
+            MultiplayerPlugin.Log.LogInfo($"[PvP] Spawn protection active for {SpawnProtectionSeconds:F0} seconds.");
         }
 
         private void Eliminate()
