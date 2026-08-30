@@ -5,8 +5,9 @@ using UnityEngine;
 
 namespace MHZombieMultiplayer
 {
-    // MH-Zombie does not expose a helicopter-health API.  Keep multiplayer
-    // combat self-contained so it cannot corrupt the game's flight systems.
+    // PvP and the game's native helicopter health share the same value. PvP
+    // still owns its elimination flow so native and multiplayer deaths cannot
+    // both restart the player for the same hit.
     public sealed class LocalPlayerCombat : MonoBehaviour
     {
         public const float MaxHealth = 100f;
@@ -25,6 +26,9 @@ namespace MHZombieMultiplayer
         private readonly List<BehaviourState> _disabledBehaviours = new List<BehaviourState>();
         private Rigidbody _rigidbody;
         private BoxCollider _hitbox;
+        private EmeraldAI.Example.EmeraldAIPlayerHealth _gameHealth;
+        private float _nextGameHealthSearch;
+        private bool _loggedMissingGameHealth;
         private float _spawnProtectedUntil;
         private bool _loggedProtectedHit;
 
@@ -47,6 +51,8 @@ namespace MHZombieMultiplayer
         private void Awake()
         {
             _rigidbody = GetComponent<Rigidbody>();
+            FindGameHealth();
+            SyncFromGameHealth();
             EnsureHitbox();
             RefillAllAmmo();
             ActivateSpawnProtection();
@@ -55,6 +61,8 @@ namespace MHZombieMultiplayer
 
         private void Update()
         {
+            SyncFromGameHealth();
+
             if (_receivedProjectiles.Count == 0) return;
             float cutoff = Time.time - 10f;
             var expired = new List<string>();
@@ -155,6 +163,7 @@ namespace MHZombieMultiplayer
             _receivedProjectiles[key] = Time.time;
 
             Health = Mathf.Max(0f, Health - damage);
+            SyncToGameHealth();
             string attacker = SteamFriends.GetFriendPersonaName(new CSteamID(attackerId));
             MultiplayerPlugin.Log.LogInfo($"[PvP] Hit by {attacker}: {damage:F0} {kind} damage. Health={Health:F0}");
             LobbyUI.Instance?.AddChatMessage($"[PvP] {attacker} hit you for {damage:F0}. Health: {Health:F0}/{MaxHealth:F0}");
@@ -174,6 +183,7 @@ namespace MHZombieMultiplayer
         public void ResetHealth()
         {
             Health = MaxHealth;
+            SyncToGameHealth();
             _receivedProjectiles.Clear();
             RefillAllAmmo();
             ActivateSpawnProtection();
@@ -245,6 +255,66 @@ namespace MHZombieMultiplayer
             }
 
             MultiplayerPlugin.Log.LogInfo($"[PvP] Refilled {refilled} weapon ammo stores on spawn/reset.");
+        }
+
+        private bool FindGameHealth()
+        {
+            if (_gameHealth != null) return true;
+            if (Time.time < _nextGameHealthSearch) return false;
+            _nextGameHealthSearch = Time.time + 2f;
+
+            Transform heliRoot = transform.root;
+            if (heliRoot != null)
+                _gameHealth = heliRoot.GetComponentInChildren<EmeraldAI.Example.EmeraldAIPlayerHealth>(true);
+
+            if (_gameHealth == null)
+            {
+                if (!_loggedMissingGameHealth)
+                {
+                    _loggedMissingGameHealth = true;
+                    MultiplayerPlugin.Log.LogWarning("[PvP] In-game helicopter health component not found yet; using PvP health until it appears.");
+                }
+                return false;
+            }
+            else
+            {
+                _loggedMissingGameHealth = false;
+                MultiplayerPlugin.Log.LogInfo($"[PvP] Linked in-game health at {_gameHealth.CurrentHealth}/{MaxHealth:F0}.");
+                return true;
+            }
+        }
+
+        private void SyncFromGameHealth()
+        {
+            if (_gameHealth == null)
+            {
+                if (!FindGameHealth()) return;
+            }
+
+            float gameValue = Mathf.Clamp(_gameHealth.CurrentHealth, 0, (int)MaxHealth);
+            if (Mathf.Approximately(Health, gameValue)) return;
+
+            Health = gameValue;
+            MultiplayerPlugin.Log.LogInfo($"[PvP] Synced game health to PvP: {Health:F0}/{MaxHealth:F0}.");
+        }
+
+        private void SyncToGameHealth()
+        {
+            if (_gameHealth == null)
+            {
+                if (!FindGameHealth()) return;
+            }
+
+            int value = Mathf.Clamp(Mathf.RoundToInt(Health), 0, (int)MaxHealth);
+            _gameHealth.CurrentHealth = value;
+
+            // Updating the serialized health text keeps the game's original HUD
+            // aligned without invoking DamagePlayer and starting a second death flow.
+            if (_gameHealth.health != null)
+            {
+                _gameHealth.health.text = value.ToString();
+                _gameHealth.health.faceColor = value <= 30 ? Color.red : Color.green;
+            }
         }
 
         private static void SetInactive(GameObject obj)
