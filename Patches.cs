@@ -14,6 +14,7 @@ namespace MHZombieMultiplayer
     public static class Patches
     {
         private static bool _projectileHooksInstalled;
+        private static bool _deathHookInstalled;
 
         public static void InstallRuntimeProjectileHooks()
         {
@@ -40,6 +41,58 @@ namespace MHZombieMultiplayer
             if (fire == null)
                 throw new MissingMethodException(projectileType.FullName, "FireProjectile");
             harmony.Patch(fire, postfix: postfix);
+        }
+
+        // Installs a postfix on RW_On_Death.Die() so an in-game death (crash,
+        // killed by the level) resets the local player's PvP health to full on
+        // respawn. Installed at runtime like the projectile hooks so a missing
+        // type/method can't kill the other patches.
+        public static void InstallRuntimeDeathHook()
+        {
+            if (_deathHookInstalled) return;
+            try
+            {
+                var type = TimeTrialHook.FindGameType("Raulworks.RW_On_Death", "RW_On_Death");
+                if (type == null)
+                {
+                    MultiplayerPlugin.Log.LogWarning("[DeathHook] RW_On_Death type not found; skipping.");
+                    return;
+                }
+
+                MethodInfo die = type.GetMethod("Die", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                if (die == null)
+                {
+                    MultiplayerPlugin.Log.LogWarning("[DeathHook] RW_On_Death.Die not found; skipping.");
+                    return;
+                }
+
+                var harmony = new Harmony("com.mhzombie.multiplayer.runtime.death");
+                var postfix = new HarmonyMethod(typeof(RuntimeDeathHook).GetMethod(nameof(RuntimeDeathHook.Postfix), BindingFlags.Static | BindingFlags.Public));
+                harmony.Patch(die, postfix: postfix);
+                _deathHookInstalled = true;
+                MultiplayerPlugin.Log.LogInfo("[DeathHook] Hooked RW_On_Death.Die to reset PvP health on respawn.");
+            }
+            catch (Exception ex)
+            {
+                MultiplayerPlugin.Log.LogWarning($"[DeathHook] installation failed: {ex.Message}");
+            }
+        }
+
+        public static class RuntimeDeathHook
+        {
+            public static void Postfix()
+            {
+                try
+                {
+                    var combat = LocalPlayerCombat.EnsureAttached();
+                    if (combat != null)
+                        combat.ResetHealth();
+                }
+                catch (Exception ex)
+                {
+                    MultiplayerPlugin.Log.LogWarning($"[DeathHook] postfix failure: {ex.Message}");
+                }
+            }
         }
 
         public static class RuntimeProjectileHook

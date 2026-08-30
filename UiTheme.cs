@@ -31,11 +31,13 @@ namespace MHZombieMultiplayer
         private static bool _ready;
 
         // Styles callers can reference directly.
-        public static GUIStyle Header    { get; private set; }
-        public static GUIStyle Dim       { get; private set; }
-        public static GUIStyle Window    { get; private set; }
-        public static GUIStyle HeaderBar { get; private set; }
-        public static GUIStyle Hr        { get; private set; }
+        public static GUIStyle Header      { get; private set; }
+        public static GUIStyle HeaderTitle { get; private set; }
+        public static GUIStyle Dim         { get; private set; }
+        public static GUIStyle Window      { get; private set; }
+        public static GUIStyle HeaderBar   { get; private set; }
+        public static GUIStyle CloseButton { get; private set; }
+        public static GUIStyle Hr          { get; private set; }
 
         public static void Apply()
         {
@@ -74,12 +76,14 @@ namespace MHZombieMultiplayer
             _skin.settings.cursorColor = Accent;
             _skin.settings.selectionColor = new Color(Accent.r, Accent.g, Accent.b, 0.35f);
 
-            Header    = MakeHeader();
-            Dim       = MakeDim();
-            HeaderBar = MakeHeaderBar();
-            Hr        = MakeHr();
+            Header      = MakeHeader();
+            HeaderTitle = MakeHeaderTitle();
+            Dim         = MakeDim();
+            HeaderBar   = MakeHeaderBar();
+            CloseButton = MakeCloseButton();
+            Hr          = MakeHr();
 
-            _skin.customStyles = new GUIStyle[] { Header, Dim, HeaderBar, Hr };
+            _skin.customStyles = new GUIStyle[] { Header, HeaderTitle, Dim, HeaderBar, CloseButton, Hr };
             _ready = true;
         }
 
@@ -110,6 +114,40 @@ namespace MHZombieMultiplayer
                 wordWrap = true,
                 alignment = TextAnchor.MiddleLeft,
                 padding = new RectOffset(4, 4, 1, 1)
+            };
+        }
+
+        // Title text drawn inside the window's header bar (no background of its
+        // own - the bar background comes from the HeaderBar group style).
+        private static GUIStyle MakeHeaderTitle()
+        {
+            return new GUIStyle
+            {
+                normal = { textColor = Accent },
+                hover = { textColor = Accent },
+                active = { textColor = Accent },
+                fontSize = 14,
+                fontStyle = FontStyle.Bold,
+                alignment = TextAnchor.MiddleLeft,
+                stretchWidth = true,
+                margin = new RectOffset(0, 0, 0, 0)
+            };
+        }
+
+        // Small square close button used in each window's header.
+        private static GUIStyle MakeCloseButton()
+        {
+            return new GUIStyle
+            {
+                normal = { textColor = TextDim },
+                hover = { textColor = Color.white, background = Solid(BtnHover) },
+                active = { textColor = Color.white, background = Solid(BtnActive) },
+                alignment = TextAnchor.MiddleCenter,
+                fontSize = 12,
+                margin = new RectOffset(0, 0, 0, 0),
+                padding = new RectOffset(0, 0, 0, 0),
+                fixedWidth = 20,
+                fixedHeight = 20
             };
         }
 

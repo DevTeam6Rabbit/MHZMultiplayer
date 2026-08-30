@@ -88,6 +88,27 @@ namespace MHZombieMultiplayer
             return true;
         }
 
+        // Reset the local PvP health to full. Called when the player dies in-game
+        // (crash / killed by the game) so a respawn starts with full health
+        // instead of carrying over whatever was left. Also clears pending damage
+        // state and re-enables anything a PvP elimination had disabled.
+        public void ResetHealth()
+        {
+            Health = MaxHealth;
+            _receivedProjectiles.Clear();
+
+            foreach (var bs in _disabledBehaviours)
+                if (bs.Behaviour != null)
+                    bs.Behaviour.enabled = bs.Enabled;
+            _disabledBehaviours.Clear();
+
+            if (_rigidbody != null)
+                _rigidbody.isKinematic = false;
+
+            if (!gameObject.activeSelf)
+                gameObject.SetActive(true);
+        }
+
         private void Eliminate()
         {
             _disabledBehaviours.Clear();
