@@ -61,6 +61,50 @@ namespace MHZombieMultiplayer
                 visual = debug.AddComponent<PvPHitboxDebugVisual>();
             visual.Initialize(renderer);
         }
+
+        public static void UpdateReportedHitboxVisual(Transform owner, Vector3 worldCenter,
+            Quaternion worldRotation, Vector3 worldSize)
+        {
+            if (owner == null) return;
+
+            Transform existing = owner.Find("ReportedPvPHitboxDebug");
+            GameObject debug;
+            PvPHitboxDebugVisual visual;
+            if (existing == null)
+            {
+                debug = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                debug.name = "ReportedPvPHitboxDebug";
+                debug.transform.SetParent(owner, false);
+
+                Collider debugCollider = debug.GetComponent<Collider>();
+                if (debugCollider != null) Object.Destroy(debugCollider);
+
+                Renderer renderer = debug.GetComponent<Renderer>();
+                Shader shader = Shader.Find("Legacy Shaders/Transparent/Diffuse") ?? Shader.Find("Standard");
+                if (renderer != null && shader != null)
+                {
+                    renderer.material = new Material(shader);
+                    renderer.material.color = new Color(0f, 1f, 1f, 0.18f);
+                    renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                    renderer.receiveShadows = false;
+                }
+
+                visual = debug.AddComponent<PvPHitboxDebugVisual>();
+                visual.Initialize(renderer);
+            }
+            else
+            {
+                debug = existing.gameObject;
+                visual = debug.GetComponent<PvPHitboxDebugVisual>();
+                if (visual == null)
+                {
+                    visual = debug.AddComponent<PvPHitboxDebugVisual>();
+                    visual.Initialize(debug.GetComponent<Renderer>());
+                }
+            }
+
+            visual.SetReportedWorldPose(worldCenter, worldRotation, worldSize);
+        }
     }
 
     // Keep this component active while hiding only its renderer. Unity's normal
@@ -68,6 +112,10 @@ namespace MHZombieMultiplayer
     public sealed class PvPHitboxDebugVisual : MonoBehaviour
     {
         private Renderer _renderer;
+        private bool _holdReportedWorldPose;
+        private Vector3 _reportedWorldCenter;
+        private Quaternion _reportedWorldRotation;
+        private Vector3 _reportedWorldSize;
 
         public void Initialize(Renderer target)
         {
@@ -81,6 +129,36 @@ namespace MHZombieMultiplayer
                 _renderer = GetComponent<Renderer>();
             if (_renderer != null)
                 _renderer.enabled = visible;
+        }
+
+        public void SetReportedWorldPose(Vector3 center, Quaternion rotation, Vector3 size)
+        {
+            _holdReportedWorldPose = true;
+            _reportedWorldCenter = center;
+            _reportedWorldRotation = rotation;
+            _reportedWorldSize = size;
+            ApplyReportedWorldPose();
+        }
+
+        private void LateUpdate()
+        {
+            // The reported box is parented to the ghost for lifecycle cleanup,
+            // but it must not inherit the ghost's interpolation/extrapolation.
+            if (_holdReportedWorldPose)
+                ApplyReportedWorldPose();
+            SetVisible(DebugTools.Enabled);
+        }
+
+        private void ApplyReportedWorldPose()
+        {
+            transform.position = _reportedWorldCenter;
+            transform.rotation = _reportedWorldRotation;
+
+            Vector3 parentScale = transform.parent != null ? transform.parent.lossyScale : Vector3.one;
+            transform.localScale = new Vector3(
+                _reportedWorldSize.x / Mathf.Max(0.0001f, Mathf.Abs(parentScale.x)),
+                _reportedWorldSize.y / Mathf.Max(0.0001f, Mathf.Abs(parentScale.y)),
+                _reportedWorldSize.z / Mathf.Max(0.0001f, Mathf.Abs(parentScale.z)));
         }
     }
 }

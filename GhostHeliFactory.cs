@@ -83,11 +83,6 @@ namespace MHZombieMultiplayer
 
             solidCollider.size = hitbox.size;
             solidCollider.center = hitbox.center;
-            // Cyan is the remote approximation. The target's own green volume
-            // is authoritative for damage and may differ slightly due to latency.
-            DebugTools.EnsureHitboxVisual(ghost.transform, hitbox,
-                new Color(0f, 1f, 1f, 0.18f));
-
             Vector3 effectiveSize = LocalPlayerCombat.GetEffectiveHitboxSize(
                 hitbox, RemoteProjectile.CollisionRadius);
             MultiplayerPlugin.Log.LogInfo(

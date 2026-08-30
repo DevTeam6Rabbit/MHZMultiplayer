@@ -128,6 +128,24 @@ namespace MHZombieMultiplayer
             return hitbox.size + Vector3.one * (2f * Mathf.Max(0f, projectileRadius) / minScale);
         }
 
+        public bool TryGetReportedHitbox(out Vector3 worldCenter, out Quaternion worldRotation,
+            out Vector3 worldSize)
+        {
+            worldCenter = Vector3.zero;
+            worldRotation = Quaternion.identity;
+            worldSize = Vector3.zero;
+            if (_hitbox == null || !_hitbox.enabled || !_hitbox.gameObject.activeInHierarchy)
+                return false;
+
+            worldCenter = _hitbox.transform.TransformPoint(_hitbox.center);
+            worldRotation = _hitbox.transform.rotation;
+            Vector3 localSize = GetEffectiveHitboxSize(_hitbox, RemoteProjectile.CollisionRadius);
+            Vector3 scale = _hitbox.transform.lossyScale;
+            worldSize = new Vector3(localSize.x * Mathf.Abs(scale.x),
+                localSize.y * Mathf.Abs(scale.y), localSize.z * Mathf.Abs(scale.z));
+            return true;
+        }
+
         private static bool ClipSegmentAxis(float origin, float direction, float extent,
             ref float enter, ref float exit)
         {
