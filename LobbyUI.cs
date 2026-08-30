@@ -38,6 +38,9 @@ namespace MHZombieMultiplayer
 
         private void Update()
         {
+            if (Input.GetKeyDown(KeyCode.F7) && SpectatorMode.Instance != null)
+                SpectatorMode.Instance.Toggle();
+
             if (Input.GetKeyDown(KeyCode.F8))
                 _showUI = !_showUI;
 
@@ -53,6 +56,16 @@ namespace MHZombieMultiplayer
 
         private void OnGUI()
         {
+            // spectator mode owns the screen: no HUD, no windows, just the
+            // optional player list (F8) so you can pick who to follow
+            var spectator = SpectatorMode.Instance;
+            if (spectator != null && spectator.IsSpectating)
+            {
+                UiTheme.Apply();
+                if (_showUI) DrawSpectatorPicker(spectator);
+                return;
+            }
+
             UiTheme.Apply();
             DrawPvPHealthBar();
 
@@ -290,5 +303,38 @@ namespace MHZombieMultiplayer
             if (_chatMessages.Count > 100) _chatMessages.RemoveAt(0);
             _chatScroll.y = float.MaxValue; // scroll to bottom
         }
-    }
+    
+        // bare list of players you can click to follow while spectating
+        private void DrawSpectatorPicker(SpectatorMode spectator)
+        {
+            var nm = NetworkManager.Instance;
+            GUILayout.BeginArea(new Rect(20, 20, 250, 320), GUI.skin.box);
+            GUILayout.Label("SPECTATING");
+            GUILayout.Space(4);
+
+            if (GUILayout.Button(spectator.Following == null ? "> Free camera" : "Free camera"))
+                spectator.StopFollowing();
+
+            if (nm != null && nm.RemotePlayers != null)
+            {
+                foreach (var kv in nm.RemotePlayers)
+                {
+                    RemotePlayer rp = kv.Value;
+                    if (rp == null) continue;
+                    if (GUILayout.Button((spectator.Following == rp ? "> " : "") + rp.DisplayName))
+                        spectator.Follow(rp);
+                }
+            }
+
+            GUILayout.Space(8);
+            GUILayout.Label("WASD  move");
+            GUILayout.Label("space / C  up / down");
+            GUILayout.Label("Q / E  cycle players");
+            GUILayout.Label("right mouse  look");
+            GUILayout.Label("shift fast / ctrl slow");
+            GUILayout.Label("F8  hide this list");
+            GUILayout.Label("F7  leave spectator");
+            GUILayout.EndArea();
+        }
+}
 }
