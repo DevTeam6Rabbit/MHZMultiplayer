@@ -100,6 +100,7 @@ namespace MHZombieMultiplayer
             }
 
             // Smooth movement toward received state
+            _targetPosition += _velocity * Time.deltaTime;
             transform.position = Vector3.Lerp(transform.position, _targetPosition, InterpSpeed * Time.deltaTime);
             transform.rotation = Quaternion.Slerp(transform.rotation, _targetRotation, InterpSpeed * Time.deltaTime);
 
