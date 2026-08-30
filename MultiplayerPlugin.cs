@@ -57,6 +57,7 @@ namespace MHZombieMultiplayer
             }
 
             Log.LogInfo("MHZ Multiplayer loaded! Press F8 to open lobby.");
+            Log.LogInfo("MHZ Multiplayer BUILD 2026-08-30b | PvP: 30mm(Base)=20, 7.62(Gat)=10, Rocket=auto | remote projectiles: sent on fire + 20Hz, velocity-driven, CCD");
 
             // kept separate from PatchAll so these survive if it dies.
             // installs are idempotent, calling every scene load is fine.
