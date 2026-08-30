@@ -113,6 +113,11 @@ namespace MHZombieMultiplayer
                 renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
                 renderer.receiveShadows = false;
             }
+
+            PvPHitboxDebugVisual visual = debug.GetComponent<PvPHitboxDebugVisual>();
+            if (visual == null)
+                visual = debug.AddComponent<PvPHitboxDebugVisual>();
+            visual.Initialize(renderer);
         }
 
         public static int TryBuildVisuals(Transform ghostRoot)

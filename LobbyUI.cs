@@ -97,6 +97,14 @@ namespace MHZombieMultiplayer
                 DrawLobbySection(nm);
 
             SectionSpace();
+            string debugState = DebugTools.Enabled ? "ON" : "OFF";
+            if (GUILayout.Button($"Debug Tools: {debugState}  (Hitboxes + Tracers)"))
+            {
+                DebugTools.Toggle();
+                AddChatMessage($"[Debug] Hitboxes and projectile tracers are now {(DebugTools.Enabled ? "on" : "off")}.");
+            }
+
+            SectionSpace();
             GUILayout.Label("F8 show/hide · F9 host · F10 leave", UiTheme.Dim);
         }
 
