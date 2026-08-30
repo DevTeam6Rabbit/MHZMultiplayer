@@ -493,6 +493,8 @@ namespace MHZombieMultiplayer
 
         public void SendProjectileSnapshot(LocalProjectileSnapshot projectile)
         {
+            ProjectileTraceDebug.RecordLocal(projectile);
+
             var state = new ProjectileStatePacket
             {
                 PacketType = PacketType.ProjectileState,
@@ -594,6 +596,7 @@ namespace MHZombieMultiplayer
         {
             _targetPosition = transform.position;
             _targetRotation = transform.rotation;
+            ProjectileTraceDebug.BeginRemote(SteamId, InstanceId, Kind, transform.position);
         }
 
         private void Update()
@@ -616,6 +619,7 @@ namespace MHZombieMultiplayer
             _targetPosition += _velocity * Time.deltaTime;
             transform.position = Vector3.Lerp(transform.position, _targetPosition, 10f * Time.deltaTime);
             transform.rotation = Quaternion.Slerp(transform.rotation, _targetRotation, 20f * Time.deltaTime);
+            ProjectileTraceDebug.RecordRemote(SteamId, InstanceId, Kind, transform.position);
 
             if (!_hasHit)
             {
