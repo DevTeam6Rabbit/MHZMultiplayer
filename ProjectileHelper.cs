@@ -18,7 +18,7 @@ namespace MHZombieMultiplayer
         // PvP balance values live here so local collision damage and networked
         // projectile damage cannot drift apart.
         public const float ThirtyMmDamage = 20f;
-        public const float SevenSixTwoDamage = 10f;
+        public const float SevenSixTwoDamage = 8f;
         public const float DefaultRocketDamage = 50f;
         // U.S. Army M80 linked ammunition for the M134 Minigun is listed at
         // 2,750 ft/s, or 838.2 m/s. Keep the rounded gameplay value in one place.

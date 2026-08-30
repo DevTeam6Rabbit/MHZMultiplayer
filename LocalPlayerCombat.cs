@@ -19,10 +19,12 @@ namespace MHZombieMultiplayer
         // fixed while height grows from 3.0 to 4.2 and center rises by 0.6.
         public static readonly Vector3 PvPBodyHitboxSize =
             new Vector3(4.8f, BaseHitboxHeight + ExtraTopHeight, 5.6f);
+        // Tuned per playtest: the body ("sphere") sits more forward (+Z) and
+        // lower (-Y); the tail ("cube") is shortened from the back (-Z).
         public static readonly Vector3 PvPBodyHitboxCenter =
-            new Vector3(0f, 1f + ExtraTopHeight * 0.5f, 0f);
-        public static readonly Vector3 PvPTailHitboxSize = new Vector3(1.3f, 1.4f, 4f);
-        public static readonly Vector3 PvPTailHitboxCenter = new Vector3(0f, 1.8f, -4.2f);
+            new Vector3(0f, 1.3f, 1.0f);
+        public static readonly Vector3 PvPTailHitboxSize = new Vector3(1.3f, 1.4f, 2.5f);
+        public static readonly Vector3 PvPTailHitboxCenter = new Vector3(0f, 1.8f, -3.45f);
 
         // Compatibility aliases for the remote ghost's non-authoritative trigger.
         public static readonly Vector3 PvPHitboxSize = PvPBodyHitboxSize;
