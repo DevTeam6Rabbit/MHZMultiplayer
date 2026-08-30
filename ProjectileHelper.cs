@@ -20,6 +20,10 @@ namespace MHZombieMultiplayer
         public const float ThirtyMmDamage = 20f;
         public const float SevenSixTwoDamage = 10f;
         public const float DefaultRocketDamage = 50f;
+        // U.S. Army M80 linked ammunition for the M134 Minigun is listed at
+        // 2,750 ft/s, or 838.2 m/s. Keep the rounded gameplay value in one place.
+        public const float SevenSixTwoProjectileSpeed = 838f;
+        public const float ThirtyMmProjectileSpeed = 200f;
 
         // MH-Zombie pools and reuses projectile GameObjects. GetInstanceID()
         // therefore identifies the pooled object, not an individual shot. Keep
@@ -34,6 +38,8 @@ namespace MHZombieMultiplayer
         private static readonly Dictionary<int, ProjectileActivation> ProjectileActivations =
             new Dictionary<int, ProjectileActivation>();
         private static readonly HashSet<int> GunProjectileObjects = new HashSet<int>();
+        private static readonly Dictionary<int, float> OriginalGatTrailTimes =
+            new Dictionary<int, float>();
         private static int _nextNetworkProjectileId;
 
         private static readonly FieldInfo BaseStartTime =
@@ -108,17 +114,96 @@ namespace MHZombieMultiplayer
                 muzzle = gun.muzzlePos != null ? gun.muzzlePos : gun.transform;
 
             ProjectileKind kind = thirtyMm ? ProjectileKind.Base : ProjectileKind.Gat;
+            float projectileSpeed = thirtyMm ? ThirtyMmProjectileSpeed : SevenSixTwoProjectileSpeed;
+            Vector3 position = muzzle.position;
+            Quaternion rotation = muzzle.rotation;
+            Vector3 velocity = muzzle.forward * projectileSpeed;
+
+            // For 7.62, use the exact pooled object that the game just fired.
+            // Its transform includes the game's aiming correction, so the local
+            // trail and the remote PvP projectile begin on the same path.
+            if (!thirtyMm)
+            {
+                GameObject firedObject = GetJustFiredGunObject(gun, lastTube);
+                Raulworks.RW_Gat_Projectile firedProjectile = firedObject != null
+                    ? firedObject.GetComponentInChildren<Raulworks.RW_Gat_Projectile>(true)
+                    : null;
+                if (firedProjectile != null && firedProjectile.gameObject.activeInHierarchy)
+                {
+                    position = firedProjectile.transform.position;
+                    rotation = firedProjectile.transform.rotation;
+                    Rigidbody firedBody = firedProjectile.GetComponent<Rigidbody>();
+                    if (firedBody != null && firedBody.velocity.sqrMagnitude > 0.01f)
+                        velocity = firedBody.velocity;
+                }
+            }
+
             snapshot = new LocalProjectileSnapshot
             {
                 InstanceId = NextNetworkProjectileId(),
-                Position = muzzle.position,
-                Rotation = muzzle.rotation,
-                Velocity = muzzle.forward * 200f,
+                Position = position,
+                Rotation = rotation,
+                Velocity = velocity,
                 LifeSeconds = thirtyMm ? 8f : 2f,
                 Kind = kind,
                 Damage = GetDamageForKind(kind),
             };
             return true;
+        }
+
+        // HandleProjectile activates pooled rounds before its Harmony postfix.
+        // Update both the prefab setting and the just-activated Rigidbody so
+        // local visuals use the same speed sent to remote clients immediately.
+        public static void ApplySevenSixTwoSpeed(Raulworks.RW_Gatling_Gun gun)
+        {
+            if (gun == null || gun.thirtyMM ||
+                ReadObjectField<GameObject>(GatlingCurrentProjectile, gun) != gun.projectile)
+                return;
+
+            SetGatProjectileSpeed(gun.projectile, false);
+            float lastTube = ReadFloatField(GatlingLastTube, gun);
+            SetGatProjectileSpeed(GetJustFiredGunObject(gun, lastTube), true);
+        }
+
+        private static GameObject GetJustFiredGunObject(Raulworks.RW_Gatling_Gun gun, float lastTube)
+        {
+            return lastTube > 0.5f
+                ? ReadObjectField<GameObject>(GatlingProjectileObject1, gun)
+                : ReadObjectField<GameObject>(GatlingProjectileObject2, gun);
+        }
+
+        private static void SetGatProjectileSpeed(GameObject projectileObject, bool requireActive)
+        {
+            if (projectileObject == null || (requireActive && !projectileObject.activeInHierarchy))
+                return;
+
+            foreach (Raulworks.RW_Gat_Projectile projectile in
+                projectileObject.GetComponentsInChildren<Raulworks.RW_Gat_Projectile>(true))
+            {
+                if (projectile == null) continue;
+                projectile.projectileSpeed = SevenSixTwoProjectileSpeed;
+
+                if (requireActive)
+                {
+                    Rigidbody body = projectile.GetComponent<Rigidbody>();
+                    if (body != null)
+                        body.velocity = projectile.transform.forward * SevenSixTwoProjectileSpeed;
+
+                    // Preserve approximately the original visible tracer length:
+                    // distance = speed * trail time.
+                    foreach (TrailRenderer trail in projectile.GetComponentsInChildren<TrailRenderer>(true))
+                    {
+                        int id = trail.GetInstanceID();
+                        if (!OriginalGatTrailTimes.TryGetValue(id, out float originalTime))
+                        {
+                            originalTime = trail.time;
+                            OriginalGatTrailTimes[id] = originalTime;
+                        }
+                        trail.time = originalTime * ThirtyMmProjectileSpeed / SevenSixTwoProjectileSpeed;
+                        trail.Clear();
+                    }
+                }
+            }
         }
 
         public static bool TrySnapshot(MonoBehaviour projectile, out LocalProjectileSnapshot snapshot)
