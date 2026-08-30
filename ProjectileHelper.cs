@@ -33,6 +33,7 @@ namespace MHZombieMultiplayer
 
         private static readonly Dictionary<int, ProjectileActivation> ProjectileActivations =
             new Dictionary<int, ProjectileActivation>();
+        private static readonly HashSet<int> GunProjectileObjects = new HashSet<int>();
         private static int _nextNetworkProjectileId;
 
         private static readonly FieldInfo BaseStartTime =
@@ -62,6 +63,14 @@ namespace MHZombieMultiplayer
             typeof(Raulworks.RW_Gatling_Gun).GetField("currentProjectile",
                 BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
 
+        private static readonly FieldInfo GatlingProjectileObject1 =
+            typeof(Raulworks.RW_Gatling_Gun).GetField("projectileObj1",
+                BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+
+        private static readonly FieldInfo GatlingProjectileObject2 =
+            typeof(Raulworks.RW_Gatling_Gun).GetField("projectileObj2",
+                BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+
         public static float GetDamageForKind(ProjectileKind kind)
         {
             switch (kind)
@@ -82,6 +91,12 @@ namespace MHZombieMultiplayer
             snapshot = default;
             if (gun == null || gun.gameObject == null || !gun.gameObject.activeInHierarchy)
                 return false;
+
+            // Remember the actual pooled objects created by this gun. Some gun
+            // prefabs also contain a rocket component; those must not enter the
+            // separate rocket-launcher network path.
+            RegisterGunProjectile(ReadObjectField<GameObject>(GatlingProjectileObject1, gun));
+            RegisterGunProjectile(ReadObjectField<GameObject>(GatlingProjectileObject2, gun));
 
             bool thirtyMm = gun.thirtyMM;
             if (!thirtyMm && ReadObjectField<GameObject>(GatlingCurrentProjectile, gun) != gun.projectile)
@@ -114,6 +129,8 @@ namespace MHZombieMultiplayer
 
             GameObject go = projectile.gameObject;
             if (!go.activeInHierarchy || go.name.Contains("RemoteProjectile_"))
+                return false;
+            if (GunProjectileObjects.Contains(go.GetInstanceID()))
                 return false;
 
             Vector3 velocity = ReadProjectileVelocity(projectile, go);
@@ -333,6 +350,12 @@ namespace MHZombieMultiplayer
                 MultiplayerPlugin.Log.LogWarning($"[ProjectileHelper] object field read failed: {ex.Message}");
                 return null;
             }
+        }
+
+        private static void RegisterGunProjectile(GameObject projectile)
+        {
+            if (projectile != null)
+                GunProjectileObjects.Add(projectile.GetInstanceID());
         }
 
         private static float SafeAverageDamage(object instance, string minName, string maxName, string fallbackName)

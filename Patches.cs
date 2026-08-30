@@ -21,9 +21,10 @@ namespace MHZombieMultiplayer
             if (_projectileHooksInstalled) return;
             var harmony = new Harmony("com.mhzombie.multiplayer.runtime.projectiles");
             var projectilePostfix = new HarmonyMethod(typeof(RuntimeProjectileHook).GetMethod(nameof(RuntimeProjectileHook.Postfix), BindingFlags.Static | BindingFlags.Public));
+            var gunPrefix = new HarmonyMethod(typeof(RuntimeGunFireHook).GetMethod(nameof(RuntimeGunFireHook.Prefix), BindingFlags.Static | BindingFlags.Public));
             var gunPostfix = new HarmonyMethod(typeof(RuntimeGunFireHook).GetMethod(nameof(RuntimeGunFireHook.Postfix), BindingFlags.Static | BindingFlags.Public));
 
-            bool gunHooked = TryPatchMethod(harmony, typeof(Raulworks.RW_Gatling_Gun), "HandleProjectile", gunPostfix);
+            bool gunHooked = TryPatchGunFire(harmony, gunPrefix, gunPostfix);
             bool rocketHooked = TryPatchMethod(harmony, typeof(Raulworks.RW_RocketProjectile), "FireProjectile", projectilePostfix);
             _projectileHooksInstalled = gunHooked && rocketHooked;
 
@@ -43,6 +44,24 @@ namespace MHZombieMultiplayer
             catch (Exception ex)
             {
                 MultiplayerPlugin.Log.LogWarning($"[ProjectileHook] {type.Name}.{methodName} installation failed: {ex.Message}");
+                return false;
+            }
+        }
+
+        private static bool TryPatchGunFire(Harmony harmony, HarmonyMethod prefix, HarmonyMethod postfix)
+        {
+            try
+            {
+                MethodInfo method = typeof(Raulworks.RW_Gatling_Gun).GetMethod("HandleProjectile",
+                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                if (method == null)
+                    throw new MissingMethodException(typeof(Raulworks.RW_Gatling_Gun).FullName, "HandleProjectile");
+                harmony.Patch(method, prefix: prefix, postfix: postfix);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                MultiplayerPlugin.Log.LogWarning($"[ProjectileHook] RW_Gatling_Gun.HandleProjectile installation failed: {ex.Message}");
                 return false;
             }
         }
@@ -109,6 +128,7 @@ namespace MHZombieMultiplayer
                 try
                 {
                     if (__instance == null) return;
+                    if (RuntimeGunFireHook.IsSpawningGunProjectile) return;
                     var obj = __instance.gameObject;
                     if (obj == null || obj.name.Contains("RemoteProjectile_") || obj.name.Contains("RemoteHeli_"))
                         return;
@@ -123,19 +143,29 @@ namespace MHZombieMultiplayer
 
         public static class RuntimeGunFireHook
         {
+            public static bool IsSpawningGunProjectile { get; private set; }
+
+            public static void Prefix()
+            {
+                IsSpawningGunProjectile = true;
+            }
+
             public static void Postfix(Raulworks.RW_Gatling_Gun __instance)
             {
-                if (NetworkManager.Instance == null || !NetworkManager.Instance.IsConnected)
-                    return;
-
                 try
                 {
+                    if (NetworkManager.Instance == null || !NetworkManager.Instance.IsConnected)
+                        return;
                     if (ProjectileHelper.TryCreateGunShot(__instance, out LocalProjectileSnapshot shot))
                         NetworkManager.Instance.SendProjectileSnapshot(shot);
                 }
                 catch (Exception ex)
                 {
                     MultiplayerPlugin.Log.LogWarning($"[ProjectileHook] gun postfix failure: {ex.Message}");
+                }
+                finally
+                {
+                    IsSpawningGunProjectile = false;
                 }
             }
         }
