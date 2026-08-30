@@ -100,6 +100,7 @@ namespace MHZombieMultiplayer
             }
 
             // Smooth movement toward received state
+            _targetPosition += _velocity * Time.deltaTime;
             transform.position = Vector3.Lerp(transform.position, _targetPosition, InterpSpeed * Time.deltaTime);
             transform.rotation = Quaternion.Slerp(transform.rotation, _targetRotation, InterpSpeed * Time.deltaTime);
 
@@ -222,6 +223,10 @@ namespace MHZombieMultiplayer
             _velocity = packet.Velocity;
             _lastUpdateTime = Time.time;
             Health = Mathf.Clamp(packet.Health, 0f, LocalPlayerCombat.MaxHealth);
+
+            if (packet.HasReportedHitbox)
+                DebugTools.UpdateReportedHitboxVisual(transform, packet.HitboxWorldCenter,
+                    packet.HitboxWorldRotation, packet.HitboxWorldSize);
 
             if (Health <= 0f)
             {

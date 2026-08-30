@@ -97,6 +97,17 @@ namespace MHZombieMultiplayer
                 DrawLobbySection(nm);
 
             SectionSpace();
+            string debugState = DebugTools.Enabled ? "ON" : "OFF";
+            if (GUILayout.Button($"Debug Tools: {debugState}  (Hitboxes + Tracers)"))
+            {
+                DebugTools.Toggle();
+                AddChatMessage($"[Debug] Hitboxes and projectile tracers are now {(DebugTools.Enabled ? "on" : "off")}.");
+            }
+
+            SectionSpace();
+            DrawHitmarkerSettings();
+
+            SectionSpace();
             GUILayout.Label("F8 show/hide · F9 host · F10 leave", UiTheme.Dim);
         }
 
@@ -151,6 +162,41 @@ namespace MHZombieMultiplayer
             {
                 nm.LeaveLobby();
                 _chatMessages.Clear();
+            }
+        }
+
+        // ── Hitmarker settings ──────────────────────────────────────────────
+        private void DrawHitmarkerSettings()
+        {
+            GUILayout.Label("Hitmarkers", UiTheme.Header);
+
+            GUILayout.BeginHorizontal();
+            if (GUILayout.Button(Hitmarker.SoundEnabled ? "Sound: ON" : "Sound: OFF", GUILayout.Width(110)))
+                Hitmarker.SoundEnabled = !Hitmarker.SoundEnabled;
+            if (GUILayout.Button("Test", GUILayout.Width(50)))
+                Hitmarker.Preview();
+            GUILayout.EndHorizontal();
+
+            GUILayout.BeginHorizontal();
+            GUILayout.Label("Volume", UiTheme.Dim, GUILayout.Width(60));
+            float vol = GUILayout.HorizontalSlider(Hitmarker.Volume, 0f, 1f);
+            GUILayout.Label($"{Mathf.RoundToInt(vol * 100f)}%", UiTheme.Dim, GUILayout.Width(40));
+            GUILayout.EndHorizontal();
+            if (!Mathf.Approximately(vol, Hitmarker.Volume))
+            {
+                Hitmarker.Volume = vol;
+                Hitmarker.Preview(); // hear the level you're setting
+            }
+
+            GUILayout.BeginHorizontal();
+            GUILayout.Label("Number", UiTheme.Dim, GUILayout.Width(60));
+            int size = Mathf.RoundToInt(GUILayout.HorizontalSlider(Hitmarker.NumberSize, 10f, 60f));
+            GUILayout.Label($"{size}px", UiTheme.Dim, GUILayout.Width(40));
+            GUILayout.EndHorizontal();
+            if (size != Hitmarker.NumberSize)
+            {
+                Hitmarker.NumberSize = size;
+                Hitmarker.Preview(); // see the size you're setting
             }
         }
 
@@ -251,7 +297,7 @@ namespace MHZombieMultiplayer
             const int barWidth = 240;
             const int barHeight = 18;
             const int gap = 10;
-            const int labelWidth = 110;
+            const int labelWidth = 150;
             const int marginBottom = 28;
 
             float hp = Mathf.Clamp(combat.Health, 0f, LocalPlayerCombat.MaxHealth);
@@ -270,7 +316,10 @@ namespace MHZombieMultiplayer
             UiTheme.DrawRect(fill, hpColor);
 
             Rect labelRect = new Rect(back.x + barWidth + gap, y, labelWidth, barHeight);
-            GUI.Label(labelRect, $"HP {hp:F0}/{LocalPlayerCombat.MaxHealth:F0}");
+            string status = combat.IsSpawnProtected
+                ? $"SHIELD {combat.SpawnProtectionRemaining:F1}s"
+                : $"HP {hp:F0}/{LocalPlayerCombat.MaxHealth:F0}";
+            GUI.Label(labelRect, status);
         }
 
         private static void SectionSpace() => GUILayout.Space(8);

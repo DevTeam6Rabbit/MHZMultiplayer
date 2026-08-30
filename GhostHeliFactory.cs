@@ -44,8 +44,8 @@ namespace MHZombieMultiplayer
                 hitbox = ghost.AddComponent<BoxCollider>();
 
             hitbox.isTrigger = true;
-            hitbox.size = Vector3.one;
-            hitbox.center = Vector3.zero;
+            hitbox.size = LocalPlayerCombat.PvPHitboxSize;
+            hitbox.center = LocalPlayerCombat.PvPHitboxCenter;
 
             if (ghost.GetComponent<Rigidbody>() == null)
             {
@@ -81,32 +81,12 @@ namespace MHZombieMultiplayer
             if (hitboxRb != null)
                 hitboxRb.detectCollisions = true;
 
-            Renderer[] renderers = ghost.GetComponentsInChildren<Renderer>(true);
-            if (renderers.Length > 0)
-            {
-                Bounds bounds = renderers[0].bounds;
-                for (int i = 1; i < renderers.Length; i++)
-                    bounds.Encapsulate(renderers[i].bounds);
-
-                Vector3 size = bounds.size;
-                float x = Mathf.Max(1.5f, size.x * 1.15f);
-                float y = Mathf.Max(1.5f, size.y * 1.25f);
-                float z = Mathf.Max(1.5f, size.z * 1.15f);
-
-                hitbox.size = new Vector3(x, y, z);
-                hitbox.center = ghost.transform.InverseTransformPoint(bounds.center);
-                solidCollider.size = new Vector3(x * 0.9f, y * 0.9f, z * 0.9f);
-                solidCollider.center = hitbox.center;
-
-                MultiplayerPlugin.Log.LogInfo($"[GhostHeliFactory] Remote hitbox size={hitbox.size} center={hitbox.center}");
-            }
-            else
-            {
-                hitbox.size = new Vector3(4f, 2f, 5f);
-                hitbox.center = new Vector3(0f, 1f, 0f);
-                solidCollider.size = new Vector3(3.5f, 1.8f, 4.5f);
-                solidCollider.center = new Vector3(0f, 1f, 0f);
-            }
+            solidCollider.size = hitbox.size;
+            solidCollider.center = hitbox.center;
+            Vector3 effectiveSize = LocalPlayerCombat.GetEffectiveHitboxSize(
+                hitbox, RemoteProjectile.CollisionRadius);
+            MultiplayerPlugin.Log.LogInfo(
+                $"[GhostHeliFactory] Remote raw hitbox={hitbox.size}, effective swept hitbox={effectiveSize}, center={hitbox.center}");
         }
 
         public static int TryBuildVisuals(Transform ghostRoot)

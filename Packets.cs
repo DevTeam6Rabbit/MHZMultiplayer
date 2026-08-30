@@ -21,6 +21,10 @@ namespace MHZombieMultiplayer
         public Quaternion Rotation;
         public Vector3 Velocity;
         public float Health;
+        public bool HasReportedHitbox;
+        public Vector3 HitboxWorldCenter;
+        public Quaternion HitboxWorldRotation;
+        public Vector3 HitboxWorldSize;
     }
 
     public struct ProjectileStatePacket
@@ -69,11 +73,13 @@ namespace MHZombieMultiplayer
         }
 
         // ── HeliState ──────────────────────────────────────────────────────────
-        // Layout: [type(1)] [steamId(8)] [pos(12)] [rot(16)] [vel(12)] [health(4)] = 53 bytes
+        // Base layout is the original 53 bytes. New clients append the target's
+        // authoritative effective hitbox [center(12)] [rotation(16)] [size(12)].
+        // Old clients ignore the tail; new clients still accept old 53-byte packets.
 
         public static byte[] Serialize(HeliStatePacket p)
         {
-            using (var ms = new MemoryStream(53))
+            using (var ms = new MemoryStream(93))
             using (var w = new BinaryWriter(ms))
             {
                 w.Write((byte)p.PacketType);
@@ -82,6 +88,9 @@ namespace MHZombieMultiplayer
                 WriteQuat(w, p.Rotation);
                 WriteVec3(w, p.Velocity);
                 w.Write(p.Health);
+                WriteVec3(w, p.HitboxWorldCenter);
+                WriteQuat(w, p.HitboxWorldRotation);
+                WriteVec3(w, p.HitboxWorldSize);
                 return ms.ToArray();
             }
         }
@@ -91,7 +100,7 @@ namespace MHZombieMultiplayer
             using (var ms = new MemoryStream(data))
             using (var r = new BinaryReader(ms))
             {
-                return new HeliStatePacket
+                var packet = new HeliStatePacket
                 {
                     PacketType = (PacketType)r.ReadByte(),
                     SteamId    = r.ReadUInt64(),
@@ -100,6 +109,18 @@ namespace MHZombieMultiplayer
                     Velocity   = ReadVec3(r),
                     Health     = r.ReadSingle(),
                 };
+
+                if (ms.Length - ms.Position >= 40)
+                {
+                    packet.HitboxWorldCenter = ReadVec3(r);
+                    packet.HitboxWorldRotation = ReadQuat(r);
+                    packet.HitboxWorldSize = ReadVec3(r);
+                    packet.HasReportedHitbox = packet.HitboxWorldSize.x > 0f &&
+                                               packet.HitboxWorldSize.y > 0f &&
+                                               packet.HitboxWorldSize.z > 0f;
+                }
+
+                return packet;
             }
         }
 
