@@ -156,6 +156,7 @@ namespace MHZombieMultiplayer
                 {
                     if (NetworkManager.Instance == null || !NetworkManager.Instance.IsConnected)
                         return;
+                    ProjectileHelper.ApplySevenSixTwoSpeed(__instance);
                     if (ProjectileHelper.TryCreateGunShot(__instance, out LocalProjectileSnapshot shot))
                         NetworkManager.Instance.SendProjectileSnapshot(shot);
                 }
