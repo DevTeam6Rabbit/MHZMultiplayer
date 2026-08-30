@@ -590,6 +590,10 @@ namespace MHZombieMultiplayer
             // Continue from the latest velocity between packet snapshots, then
             // apply a gentle correction when the next snapshot arrives.
             transform.position += _velocity * Time.deltaTime;
+            // The correction target must move with the projectile too. Keeping
+            // it at the spawn point makes a 200 m/s bullet converge at 20 m
+            // because the smoothing continuously pulls it backward.
+            _targetPosition += _velocity * Time.deltaTime;
             transform.position = Vector3.Lerp(transform.position, _targetPosition, 10f * Time.deltaTime);
             transform.rotation = Quaternion.Slerp(transform.rotation, _targetRotation, 20f * Time.deltaTime);
 
