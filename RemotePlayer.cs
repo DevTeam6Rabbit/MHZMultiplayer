@@ -49,7 +49,7 @@ namespace MHZombieMultiplayer
             _nameLabel = labelObj.AddComponent<TextMesh>();
             _nameLabel.text = DisplayName ?? "Player";
             _nameLabel.fontSize = 200;
-            _nameLabel.characterSize = 0.675f;
+            _nameLabel.characterSize = 0.3f;
             _nameLabel.alignment = TextAlignment.Center;
             _nameLabel.anchor = TextAnchor.MiddleCenter;
             _nameLabel.fontStyle = FontStyle.Bold;
@@ -69,7 +69,7 @@ namespace MHZombieMultiplayer
             _nameLabel.color = Color.cyan;
 
             labelObj.transform.localPosition = new Vector3(0f, 5.5f, 0f);
-            labelObj.transform.localScale = Vector3.one;
+            labelObj.transform.localScale = Vector3.one * 0.6f;
 
             // If the factory managed a real copy at spawn, there's no placeholder
             _visualsBuilt = transform.Find("PlaceholderBox") == null;
