@@ -211,12 +211,16 @@ namespace MHZombieMultiplayer
             };
 
             if (combat != null && combat.TryGetReportedHitbox(out Vector3 center,
-                out Quaternion hitboxRotation, out Vector3 hitboxSize))
+                out Quaternion hitboxRotation, out Vector3 hitboxSize,
+                out Vector3 tailCenter, out Vector3 tailSize))
             {
                 packet.HasReportedHitbox = true;
                 packet.HitboxWorldCenter = center;
                 packet.HitboxWorldRotation = hitboxRotation;
                 packet.HitboxWorldSize = hitboxSize;
+                packet.HasReportedTailHitbox = true;
+                packet.TailHitboxWorldCenter = tailCenter;
+                packet.TailHitboxWorldSize = tailSize;
             }
 
             byte[] data = PacketSerializer.Serialize(packet);
@@ -696,9 +700,9 @@ namespace MHZombieMultiplayer
 
         private void OnTriggerEnter(Collider other)
         {
-            LocalPlayerCombat local = other != null ? other.GetComponentInParent<LocalPlayerCombat>() : null;
-            if (local != null)
-                TryHitLocalPlayer(local);
+            // Native helicopter colliders do not define PvP damage. The swept
+            // compound test in Update is authoritative and prevents invisible
+            // model colliders from extending the displayed target volume.
         }
 
         public void TryHitLocalPlayer()

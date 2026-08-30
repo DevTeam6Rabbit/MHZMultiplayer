@@ -25,6 +25,9 @@ namespace MHZombieMultiplayer
         public Vector3 HitboxWorldCenter;
         public Quaternion HitboxWorldRotation;
         public Vector3 HitboxWorldSize;
+        public bool HasReportedTailHitbox;
+        public Vector3 TailHitboxWorldCenter;
+        public Vector3 TailHitboxWorldSize;
     }
 
     public struct ProjectileStatePacket
@@ -74,12 +77,13 @@ namespace MHZombieMultiplayer
 
         // ── HeliState ──────────────────────────────────────────────────────────
         // Base layout is the original 53 bytes. New clients append the target's
-        // authoritative effective hitbox [center(12)] [rotation(16)] [size(12)].
+        // authoritative effective body [center(12)] [rotation(16)] [size(12)],
+        // then its tail [center(12)] [size(12)].
         // Old clients ignore the tail; new clients still accept old 53-byte packets.
 
         public static byte[] Serialize(HeliStatePacket p)
         {
-            using (var ms = new MemoryStream(93))
+            using (var ms = new MemoryStream(117))
             using (var w = new BinaryWriter(ms))
             {
                 w.Write((byte)p.PacketType);
@@ -91,6 +95,8 @@ namespace MHZombieMultiplayer
                 WriteVec3(w, p.HitboxWorldCenter);
                 WriteQuat(w, p.HitboxWorldRotation);
                 WriteVec3(w, p.HitboxWorldSize);
+                WriteVec3(w, p.TailHitboxWorldCenter);
+                WriteVec3(w, p.TailHitboxWorldSize);
                 return ms.ToArray();
             }
         }
@@ -118,6 +124,15 @@ namespace MHZombieMultiplayer
                     packet.HasReportedHitbox = packet.HitboxWorldSize.x > 0f &&
                                                packet.HitboxWorldSize.y > 0f &&
                                                packet.HitboxWorldSize.z > 0f;
+                }
+
+                if (ms.Length - ms.Position >= 24)
+                {
+                    packet.TailHitboxWorldCenter = ReadVec3(r);
+                    packet.TailHitboxWorldSize = ReadVec3(r);
+                    packet.HasReportedTailHitbox = packet.TailHitboxWorldSize.x > 0f &&
+                                                   packet.TailHitboxWorldSize.y > 0f &&
+                                                   packet.TailHitboxWorldSize.z > 0f;
                 }
 
                 return packet;

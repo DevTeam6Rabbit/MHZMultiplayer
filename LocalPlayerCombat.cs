@@ -17,10 +17,16 @@ namespace MHZombieMultiplayer
         private const float ExtraTopHeight = BaseHitboxHeight * 0.4f;
         // Add the requested 40% entirely above the old box: its bottom remains
         // fixed while height grows from 3.0 to 4.2 and center rises by 0.6.
-        public static readonly Vector3 PvPHitboxSize =
-            new Vector3(4.5f, BaseHitboxHeight + ExtraTopHeight, 7f);
-        public static readonly Vector3 PvPHitboxCenter =
+        public static readonly Vector3 PvPBodyHitboxSize =
+            new Vector3(4.8f, BaseHitboxHeight + ExtraTopHeight, 5.6f);
+        public static readonly Vector3 PvPBodyHitboxCenter =
             new Vector3(0f, 1f + ExtraTopHeight * 0.5f, 0f);
+        public static readonly Vector3 PvPTailHitboxSize = new Vector3(1.3f, 1.4f, 4f);
+        public static readonly Vector3 PvPTailHitboxCenter = new Vector3(0f, 1.8f, -4.2f);
+
+        // Compatibility aliases for the remote ghost's non-authoritative trigger.
+        public static readonly Vector3 PvPHitboxSize = PvPBodyHitboxSize;
+        public static readonly Vector3 PvPHitboxCenter = PvPBodyHitboxCenter;
 
         private readonly Dictionary<string, float> _receivedProjectiles = new Dictionary<string, float>();
         private readonly List<BehaviourState> _disabledBehaviours = new List<BehaviourState>();
@@ -82,68 +88,120 @@ namespace MHZombieMultiplayer
             _hitbox = hitbox.GetComponent<BoxCollider>();
             if (_hitbox == null) _hitbox = hitbox.AddComponent<BoxCollider>();
             _hitbox.isTrigger = true;
-            _hitbox.size = PvPHitboxSize;
-            _hitbox.center = PvPHitboxCenter;
+            _hitbox.size = PvPBodyHitboxSize;
+            _hitbox.center = PvPBodyHitboxCenter;
+            // Damage uses the swept compound test below. Disable the legacy box
+            // so its broader trigger cannot report a false hit outside the body.
+            _hitbox.enabled = false;
 
-            if (hitbox.GetComponent<LocalPlayerHitbox>() == null)
-                hitbox.AddComponent<LocalPlayerHitbox>();
-
-            // Green is the authoritative receiver volume on this client.
-            DebugTools.EnsureHitboxVisual(hitbox.transform, _hitbox,
+            DebugTools.EnsureCompoundHitboxVisual(hitbox.transform,
+                PvPBodyHitboxCenter, GetEffectiveLocalSize(PvPBodyHitboxSize, RemoteProjectile.CollisionRadius),
+                PvPTailHitboxCenter, GetEffectiveLocalSize(PvPTailHitboxSize, RemoteProjectile.CollisionRadius),
                 new Color(0.1f, 1f, 0.2f, 0.18f));
         }
 
-        // Trigger callbacks alone can miss a 200 m/s projectile that crosses the
-        // entire box between physics ticks. Test the whole travelled segment
-        // against this oriented box, expanded by the projectile radius.
+        // Test the whole travelled segment against the body ellipsoid and tail
+        // cuboid. This prevents 838 m/s rounds tunnelling between frames.
         public bool SegmentIntersectsHitbox(Vector3 worldStart, Vector3 worldEnd, float projectileRadius)
         {
-            if (_hitbox == null || !_hitbox.enabled || !_hitbox.gameObject.activeInHierarchy)
+            if (_hitbox == null || !_hitbox.gameObject.activeInHierarchy)
                 return false;
 
             Transform hitboxTransform = _hitbox.transform;
-            Vector3 start = hitboxTransform.InverseTransformPoint(worldStart) - _hitbox.center;
-            Vector3 end = hitboxTransform.InverseTransformPoint(worldEnd) - _hitbox.center;
-            Vector3 direction = end - start;
+            Vector3 start = hitboxTransform.InverseTransformPoint(worldStart);
+            Vector3 end = hitboxTransform.InverseTransformPoint(worldEnd);
+            float padding = projectileRadius / GetMinimumScale(hitboxTransform);
 
-            Vector3 halfSize = GetEffectiveHitboxSize(_hitbox, projectileRadius) * 0.5f;
+            return SegmentIntersectsEllipsoid(start, end, PvPBodyHitboxCenter,
+                       PvPBodyHitboxSize * 0.5f + Vector3.one * padding) ||
+                   SegmentIntersectsBox(start, end, PvPTailHitboxCenter,
+                       PvPTailHitboxSize * 0.5f + Vector3.one * padding);
+        }
 
+        // The projectile has radius rather than being a zero-width ray, so the
+        // effective debug dimensions include the same local-space padding.
+        public static Vector3 GetEffectiveHitboxSize(BoxCollider hitbox, float projectileRadius)
+        {
+            if (hitbox == null) return Vector3.zero;
+            float padding = Mathf.Max(0f, projectileRadius) / GetMinimumScale(hitbox.transform);
+            return hitbox.size + Vector3.one * (2f * padding);
+        }
+
+        private Vector3 GetEffectiveLocalSize(Vector3 rawSize, float projectileRadius)
+        {
+            float padding = Mathf.Max(0f, projectileRadius) / GetMinimumScale(_hitbox.transform);
+            return rawSize + Vector3.one * (2f * padding);
+        }
+
+        public bool TryGetReportedHitbox(out Vector3 bodyWorldCenter, out Quaternion worldRotation,
+            out Vector3 bodyWorldSize, out Vector3 tailWorldCenter, out Vector3 tailWorldSize)
+        {
+            bodyWorldCenter = Vector3.zero;
+            worldRotation = Quaternion.identity;
+            bodyWorldSize = Vector3.zero;
+            tailWorldCenter = Vector3.zero;
+            tailWorldSize = Vector3.zero;
+            if (_hitbox == null || !_hitbox.gameObject.activeInHierarchy)
+                return false;
+
+            bodyWorldCenter = _hitbox.transform.TransformPoint(PvPBodyHitboxCenter);
+            tailWorldCenter = _hitbox.transform.TransformPoint(PvPTailHitboxCenter);
+            worldRotation = _hitbox.transform.rotation;
+            Vector3 scale = _hitbox.transform.lossyScale;
+            bodyWorldSize = ScaleSize(GetEffectiveLocalSize(PvPBodyHitboxSize,
+                RemoteProjectile.CollisionRadius), scale);
+            tailWorldSize = ScaleSize(GetEffectiveLocalSize(PvPTailHitboxSize,
+                RemoteProjectile.CollisionRadius), scale);
+            return true;
+        }
+
+        private static Vector3 ScaleSize(Vector3 size, Vector3 scale)
+        {
+            return new Vector3(size.x * Mathf.Abs(scale.x), size.y * Mathf.Abs(scale.y),
+                size.z * Mathf.Abs(scale.z));
+        }
+
+        private static float GetMinimumScale(Transform target)
+        {
+            Vector3 scale = target.lossyScale;
+            return Mathf.Max(0.0001f,
+                Mathf.Min(Mathf.Abs(scale.x), Mathf.Min(Mathf.Abs(scale.y), Mathf.Abs(scale.z))));
+        }
+
+        private static bool SegmentIntersectsEllipsoid(Vector3 start, Vector3 end,
+            Vector3 center, Vector3 radii)
+        {
+            Vector3 normalizedStart = new Vector3((start.x - center.x) / radii.x,
+                (start.y - center.y) / radii.y, (start.z - center.z) / radii.z);
+            Vector3 delta = end - start;
+            Vector3 normalizedDelta = new Vector3(delta.x / radii.x,
+                delta.y / radii.y, delta.z / radii.z);
+
+            float c = Vector3.Dot(normalizedStart, normalizedStart) - 1f;
+            if (c <= 0f) return true;
+
+            float a = Vector3.Dot(normalizedDelta, normalizedDelta);
+            if (a < 0.000001f) return false;
+            float b = 2f * Vector3.Dot(normalizedStart, normalizedDelta);
+            float discriminant = b * b - 4f * a * c;
+            if (discriminant < 0f) return false;
+
+            float root = Mathf.Sqrt(discriminant);
+            float first = (-b - root) / (2f * a);
+            float second = (-b + root) / (2f * a);
+            return (first >= 0f && first <= 1f) || (second >= 0f && second <= 1f);
+        }
+
+        private static bool SegmentIntersectsBox(Vector3 start, Vector3 end,
+            Vector3 center, Vector3 halfSize)
+        {
+            start -= center;
+            Vector3 direction = end - center - start;
             float enter = 0f;
             float exit = 1f;
             return ClipSegmentAxis(start.x, direction.x, halfSize.x, ref enter, ref exit) &&
                    ClipSegmentAxis(start.y, direction.y, halfSize.y, ref enter, ref exit) &&
                    ClipSegmentAxis(start.z, direction.z, halfSize.z, ref enter, ref exit);
-        }
-
-        // SegmentIntersectsHitbox tests a projectile sphere, not a zero-width
-        // ray. Its radius expands the box in local space. Debug rendering calls
-        // this same method so the shown volume cannot drift from collision math.
-        public static Vector3 GetEffectiveHitboxSize(BoxCollider hitbox, float projectileRadius)
-        {
-            if (hitbox == null) return Vector3.zero;
-
-            Vector3 scale = hitbox.transform.lossyScale;
-            float minScale = Mathf.Max(0.0001f,
-                Mathf.Min(Mathf.Abs(scale.x), Mathf.Min(Mathf.Abs(scale.y), Mathf.Abs(scale.z))));
-            return hitbox.size + Vector3.one * (2f * Mathf.Max(0f, projectileRadius) / minScale);
-        }
-
-        public bool TryGetReportedHitbox(out Vector3 worldCenter, out Quaternion worldRotation,
-            out Vector3 worldSize)
-        {
-            worldCenter = Vector3.zero;
-            worldRotation = Quaternion.identity;
-            worldSize = Vector3.zero;
-            if (_hitbox == null || !_hitbox.enabled || !_hitbox.gameObject.activeInHierarchy)
-                return false;
-
-            worldCenter = _hitbox.transform.TransformPoint(_hitbox.center);
-            worldRotation = _hitbox.transform.rotation;
-            Vector3 localSize = GetEffectiveHitboxSize(_hitbox, RemoteProjectile.CollisionRadius);
-            Vector3 scale = _hitbox.transform.lossyScale;
-            worldSize = new Vector3(localSize.x * Mathf.Abs(scale.x),
-                localSize.y * Mathf.Abs(scale.y), localSize.z * Mathf.Abs(scale.z));
-            return true;
         }
 
         private static bool ClipSegmentAxis(float origin, float direction, float extent,

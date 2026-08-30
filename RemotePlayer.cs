@@ -226,7 +226,9 @@ namespace MHZombieMultiplayer
 
             if (packet.HasReportedHitbox)
                 DebugTools.UpdateReportedHitboxVisual(transform, packet.HitboxWorldCenter,
-                    packet.HitboxWorldRotation, packet.HitboxWorldSize);
+                    packet.HitboxWorldRotation, packet.HitboxWorldSize,
+                    packet.HasReportedTailHitbox ? packet.TailHitboxWorldCenter : packet.HitboxWorldCenter,
+                    packet.HasReportedTailHitbox ? packet.TailHitboxWorldSize : Vector3.zero);
 
             if (Health <= 0f)
             {

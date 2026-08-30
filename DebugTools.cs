@@ -82,32 +82,68 @@ namespace MHZombieMultiplayer
             visual.Initialize(renderer);
         }
 
+        public static void EnsureCompoundHitboxVisual(Transform parent, Vector3 bodyCenter,
+            Vector3 bodySize, Vector3 tailCenter, Vector3 tailSize, Color color)
+        {
+            EnsureLocalShapeVisual(parent, "PvPBodyHitboxDebug", PrimitiveType.Sphere,
+                bodyCenter, bodySize, color);
+            EnsureLocalShapeVisual(parent, "PvPTailHitboxDebug", PrimitiveType.Cube,
+                tailCenter, tailSize, color);
+        }
+
+        private static void EnsureLocalShapeVisual(Transform parent, string name,
+            PrimitiveType primitive, Vector3 center, Vector3 size, Color color)
+        {
+            Transform existing = parent.Find(name);
+            GameObject debug = existing != null ? existing.gameObject :
+                GameObject.CreatePrimitive(primitive);
+            debug.name = name;
+            if (existing == null)
+                debug.transform.SetParent(parent, false);
+
+            Collider debugCollider = debug.GetComponent<Collider>();
+            if (debugCollider != null) Object.Destroy(debugCollider);
+            debug.transform.localPosition = center;
+            debug.transform.localRotation = Quaternion.identity;
+            debug.transform.localScale = size;
+
+            Renderer renderer = debug.GetComponent<Renderer>();
+            ConfigureDebugRenderer(renderer, color);
+            PvPHitboxDebugVisual visual = debug.GetComponent<PvPHitboxDebugVisual>();
+            if (visual == null)
+                visual = debug.AddComponent<PvPHitboxDebugVisual>();
+            visual.Initialize(renderer);
+        }
+
         public static void UpdateReportedHitboxVisual(Transform owner, Vector3 worldCenter,
-            Quaternion worldRotation, Vector3 worldSize)
+            Quaternion worldRotation, Vector3 worldSize, Vector3 tailWorldCenter,
+            Vector3 tailWorldSize)
         {
             if (owner == null) return;
 
-            Transform existing = owner.Find("ReportedPvPHitboxDebug");
+            UpdateReportedShapeVisual(owner, "ReportedPvPBodyHitboxDebug", PrimitiveType.Sphere,
+                worldCenter, worldRotation, worldSize);
+            UpdateReportedShapeVisual(owner, "ReportedPvPTailHitboxDebug", PrimitiveType.Cube,
+                tailWorldCenter, worldRotation, tailWorldSize);
+        }
+
+        private static void UpdateReportedShapeVisual(Transform owner, string name,
+            PrimitiveType primitive, Vector3 worldCenter, Quaternion worldRotation, Vector3 worldSize)
+        {
+            Transform existing = owner.Find(name);
             GameObject debug;
             PvPHitboxDebugVisual visual;
             if (existing == null)
             {
-                debug = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                debug.name = "ReportedPvPHitboxDebug";
+                debug = GameObject.CreatePrimitive(primitive);
+                debug.name = name;
                 debug.transform.SetParent(owner, false);
 
                 Collider debugCollider = debug.GetComponent<Collider>();
                 if (debugCollider != null) Object.Destroy(debugCollider);
 
                 Renderer renderer = debug.GetComponent<Renderer>();
-                Shader shader = Shader.Find("Legacy Shaders/Transparent/Diffuse") ?? Shader.Find("Standard");
-                if (renderer != null && shader != null)
-                {
-                    renderer.material = new Material(shader);
-                    renderer.material.color = new Color(0f, 1f, 1f, 0.18f);
-                    renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-                    renderer.receiveShadows = false;
-                }
+                ConfigureDebugRenderer(renderer, new Color(0f, 1f, 1f, 0.18f));
 
                 visual = debug.AddComponent<PvPHitboxDebugVisual>();
                 visual.Initialize(renderer);
@@ -124,6 +160,16 @@ namespace MHZombieMultiplayer
             }
 
             visual.SetReportedWorldPose(worldCenter, worldRotation, worldSize);
+        }
+
+        private static void ConfigureDebugRenderer(Renderer renderer, Color color)
+        {
+            Shader shader = Shader.Find("Legacy Shaders/Transparent/Diffuse") ?? Shader.Find("Standard");
+            if (renderer == null || shader == null) return;
+            renderer.material = new Material(shader);
+            renderer.material.color = color;
+            renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            renderer.receiveShadows = false;
         }
     }
 
