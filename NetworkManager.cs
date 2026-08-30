@@ -29,6 +29,12 @@ namespace MHZombieMultiplayer
         public Dictionary<CSteamID, RemotePlayer> RemotePlayers { get; private set; }
             = new Dictionary<CSteamID, RemotePlayer>();
 
+        private readonly Dictionary<string, RemoteProjectile> _remoteProjectiles = new Dictionary<string, RemoteProjectile>();
+        // Logs the first received ProjectileState packet per sender+instance so
+        // a short test shows exactly which remote projectiles actually arrive.
+        private readonly System.Collections.Generic.HashSet<string> _loggedProjectilePackets =
+            new System.Collections.Generic.HashSet<string>();
+
         // 20/sec is plenty, the lerp on the receiving side smooths the rest.
         // careful raising it - everyone sends to everyone, so it's n^2.
         private const float SendRate = 0.05f; // 20 times/sec
@@ -67,12 +73,16 @@ namespace MHZombieMultiplayer
         {
             if (!IsConnected) return;
 
+            LocalPlayerCombat.EnsureAttached();
+            CleanupRemoteProjectiles();
+
             // Send our helicopter state on a timer
             _sendTimer -= Time.deltaTime;
             if (_sendTimer <= 0f)
             {
                 _sendTimer = SendRate;
                 BroadcastHeliState();
+                BroadcastProjectileState();
             }
 
             // Read incoming packets every frame
@@ -190,7 +200,8 @@ namespace MHZombieMultiplayer
                 SteamId    = SteamUser.GetSteamID().m_SteamID,
                 Position   = localHeli.transform.position,
                 Rotation   = localHeli.transform.rotation,
-                Velocity   = localHeli.GetComponent<Rigidbody>()?.velocity ?? Vector3.zero
+                Velocity   = localHeli.GetComponent<Rigidbody>()?.velocity ?? Vector3.zero,
+                Health     = LocalPlayerCombat.EnsureAttached()?.Health ?? LocalPlayerCombat.MaxHealth,
             };
 
             byte[] data = PacketSerializer.Serialize(packet);
@@ -267,39 +278,136 @@ namespace MHZombieMultiplayer
                 if (!SteamNetworking.ReadP2PPacket(data, msgSize, out bytesRead, out sender, Channel))
                     continue;
 
-                PacketType type = PacketSerializer.PeekType(data);
-                switch (type)
+                if (!IsLobbyMember(sender))
+                    continue;
+
+                try
                 {
-                    case PacketType.HeliState:
-                        HandleHeliState(PacketSerializer.DeserializeHeliState(data), sender);
-                        break;
-                    case PacketType.Chat:
-                        HandleChat(PacketSerializer.DeserializeChat(data));
-                        break;
-                    case PacketType.RaceFinish:
-                        HandleRaceFinish(PacketSerializer.DeserializeRaceFinish(data));
-                        break;
+                    PacketType type = PacketSerializer.PeekType(data);
+                    switch (type)
+                    {
+                        case PacketType.HeliState:
+                            HandleHeliState(PacketSerializer.DeserializeHeliState(data), sender);
+                            break;
+                        case PacketType.Chat:
+                            HandleChat(PacketSerializer.DeserializeChat(data), sender);
+                            break;
+                        case PacketType.RaceFinish:
+                            HandleRaceFinish(PacketSerializer.DeserializeRaceFinish(data), sender);
+                            break;
+                        case PacketType.ProjectileState:
+                            HandleProjectileState(PacketSerializer.DeserializeProjectileState(data), sender);
+                            break;
+                        case PacketType.PlayerDamage:
+                            HandlePlayerDamage(PacketSerializer.DeserializePlayerDamage(data), sender);
+                            break;
+                    }
+                }
+                catch (System.Exception ex)
+                {
+                    MultiplayerPlugin.Log.LogWarning($"[NetworkManager] Dropped malformed {PacketSerializer.PeekType(data)} packet from {sender}: {ex.Message}");
                 }
             }
         }
 
+        private bool IsLobbyMember(CSteamID steamId)
+        {
+            if (!IsConnected || !LobbyId.IsValid()) return false;
+            int count = SteamMatchmaking.GetNumLobbyMembers(LobbyId);
+            for (int i = 0; i < count; i++)
+                if (SteamMatchmaking.GetLobbyMemberByIndex(LobbyId, i) == steamId)
+                    return true;
+            return false;
+        }
+
         private void HandleHeliState(HeliStatePacket packet, CSteamID sender)
         {
+            if (packet.SteamId != sender.m_SteamID || packet.Health < 0f || packet.Health > LocalPlayerCombat.MaxHealth) return;
             if (RemotePlayers.TryGetValue(sender, out RemotePlayer remote))
                 remote.ApplyState(packet);
         }
 
-        private void HandleChat(ChatPacket packet)
+        private void HandleProjectileState(ProjectileStatePacket packet, CSteamID sender)
         {
-            CSteamID sender = new CSteamID(packet.SteamId);
+            if (packet.SteamId != sender.m_SteamID || packet.Damage <= 0f || packet.Damage > 100f ||
+                packet.Kind < ProjectileKind.Base || packet.Kind > ProjectileKind.Rocket)
+                return;
+
+            string key = sender.m_SteamID + ":" + packet.InstanceId;
+
+            if (_loggedProjectilePackets.Add(key))
+                MultiplayerPlugin.Log.LogInfo($"[PvP-Rx] kind={packet.Kind} dmg={packet.Damage:F0} from={SteamFriends.GetFriendPersonaName(sender)}");
+
+            if (!_remoteProjectiles.TryGetValue(key, out RemoteProjectile projectile))
+            {
+                projectile = SpawnRemoteProjectile(sender, packet);
+                if (projectile != null)
+                    _remoteProjectiles[key] = projectile;
+            }
+
+            if (projectile != null)
+                projectile.ApplyState(packet);
+        }
+
+        private void HandleChat(ChatPacket packet, CSteamID sender)
+        {
+            if (packet.SteamId != sender.m_SteamID) return;
             string name = SteamFriends.GetFriendPersonaName(sender);
             LobbyUI.Instance?.AddChatMessage($"{name}: {packet.Message}");
         }
 
-        private void HandleRaceFinish(RaceFinishPacket packet)
+        private void HandleRaceFinish(RaceFinishPacket packet, CSteamID sender)
         {
+            if (packet.SteamId != sender.m_SteamID) return;
             string name = SteamFriends.GetFriendPersonaName(new CSteamID(packet.SteamId));
             ScoreboardManager.ReportRemoteFinish(name, packet.TimeSeconds);
+        }
+
+        private void HandlePlayerDamage(PlayerDamagePacket packet, CSteamID sender)
+        {
+            // A damage confirmation is sent by the client that was hit.  This
+            // prevents a shooter from directly changing another player's health.
+            if (packet.TargetSteamId != sender.m_SteamID || packet.AttackerSteamId == packet.TargetSteamId ||
+                packet.Damage <= 0f || packet.Damage > 100f || packet.TargetHealthAfter < 0f || packet.TargetHealthAfter > LocalPlayerCombat.MaxHealth)
+                return;
+
+            CSteamID victim = new CSteamID(packet.TargetSteamId);
+            if (RemotePlayers.TryGetValue(victim, out RemotePlayer remote))
+            {
+                remote.ApplyDamage(packet.Damage, packet.ProjectileInstanceId);
+                MultiplayerPlugin.Log.LogInfo($"[NetworkManager] {SteamFriends.GetFriendPersonaName(sender)} hit {SteamFriends.GetFriendPersonaName(victim)} for {packet.Damage} damage");
+            }
+
+            if (packet.AttackerSteamId == SteamUser.GetSteamID().m_SteamID)
+            {
+                ScoreboardManager.ReportDamageDealt(packet.TargetSteamId, packet.Damage, packet.TargetHealthAfter <= 0f);
+                LobbyUI.Instance?.AddChatMessage($"[PvP] You hit {SteamFriends.GetFriendPersonaName(victim)} for {packet.Damage:F0}.");
+                LobbyUI.Instance?.ShowScoreboard();
+            }
+        }
+
+        public void SendDamageConfirmation(ulong attackerSteamId, float damage, int projectileInstanceId, float healthAfter)
+        {
+            if (!IsConnected) return;
+
+            var packet = new PlayerDamagePacket
+            {
+                PacketType = PacketType.PlayerDamage,
+                TargetSteamId = SteamUser.GetSteamID().m_SteamID,
+                AttackerSteamId = attackerSteamId,
+                Damage = damage,
+                ProjectileInstanceId = projectileInstanceId,
+                TargetHealthAfter = healthAfter,
+            };
+
+            byte[] data = PacketSerializer.Serialize(packet);
+            int count = SteamMatchmaking.GetNumLobbyMembers(LobbyId);
+            for (int i = 0; i < count; i++)
+            {
+                CSteamID member = SteamMatchmaking.GetLobbyMemberByIndex(LobbyId, i);
+                if (member != SteamUser.GetSteamID())
+                    SteamNetworking.SendP2PPacket(member, data, (uint)data.Length, EP2PSend.k_EP2PSendReliable, Channel);
+            }
         }
 
         // ─── Remote player management ─────────────────────────────────────────
@@ -317,6 +425,35 @@ namespace MHZombieMultiplayer
             MultiplayerPlugin.Log.LogInfo($"Spawned ghost heli for {rp.DisplayName}");
         }
 
+        private RemoteProjectile SpawnRemoteProjectile(CSteamID sender, ProjectileStatePacket packet)
+        {
+            GameObject go = new GameObject($"RemoteProjectile_{sender.m_SteamID}_{packet.InstanceId}");
+            go.transform.position = packet.Position;
+            go.transform.rotation = packet.Rotation;
+            UnityEngine.Object.DontDestroyOnLoad(go);
+
+            var rb = go.AddComponent<Rigidbody>();
+            rb.useGravity = false;
+            rb.isKinematic = true;
+            rb.detectCollisions = true;
+            // Fast bullets (7.62) can tunnel through the victim's hitbox between
+            // frames with discrete detection; continuous mode closes that gap.
+            rb.collisionDetectionMode = CollisionDetectionMode.Continuous;
+
+            var col = go.AddComponent<SphereCollider>();
+            col.isTrigger = true;
+            col.radius = 0.65f; // generous so fast/small bullets reliably hit the victim
+
+            RemoteProjectile projectile = go.AddComponent<RemoteProjectile>();
+            projectile.SteamId = sender.m_SteamID;
+            projectile.InstanceId = packet.InstanceId;
+            projectile.Kind = packet.Kind;
+            projectile.Damage = packet.Damage;
+            projectile.CreateVisual();
+            projectile.ApplyState(packet);
+            return projectile;
+        }
+
         private void RemoveRemotePlayer(CSteamID steamId)
         {
             if (RemotePlayers.TryGetValue(steamId, out RemotePlayer rp))
@@ -325,6 +462,79 @@ namespace MHZombieMultiplayer
                     Destroy(rp.gameObject);
                 RemotePlayers.Remove(steamId);
             }
+        }
+
+        private void BroadcastProjectileState()
+        {
+            if (!IsConnected) return;
+
+            foreach (var projectile in FindLocalProjectiles())
+                SendProjectileSnapshot(projectile);
+        }
+
+        public void SendProjectileSnapshot(MonoBehaviour projectile)
+        {
+            if (!IsConnected || !ProjectileHelper.TrySnapshot(projectile, out LocalProjectileSnapshot snapshot)) return;
+            SendProjectileSnapshot(snapshot);
+        }
+
+        private void SendProjectileSnapshot(LocalProjectileSnapshot projectile)
+        {
+            var state = new ProjectileStatePacket
+            {
+                PacketType = PacketType.ProjectileState,
+                SteamId = SteamUser.GetSteamID().m_SteamID,
+                InstanceId = projectile.InstanceId,
+                Position = projectile.Position,
+                Rotation = projectile.Rotation,
+                Velocity = projectile.Velocity,
+                LifeSeconds = projectile.LifeSeconds,
+                Kind = projectile.Kind,
+                Damage = projectile.Damage,
+            };
+
+            byte[] data = PacketSerializer.Serialize(state);
+            int count = SteamMatchmaking.GetNumLobbyMembers(LobbyId);
+            for (int i = 0; i < count; i++)
+            {
+                CSteamID member = SteamMatchmaking.GetLobbyMemberByIndex(LobbyId, i);
+                if (member != SteamUser.GetSteamID())
+                    SteamNetworking.SendP2PPacket(member, data, (uint)data.Length, EP2PSend.k_EP2PSendUnreliable, Channel);
+            }
+        }
+
+        private System.Collections.Generic.List<LocalProjectileSnapshot> FindLocalProjectiles()
+        {
+            var output = new System.Collections.Generic.List<LocalProjectileSnapshot>();
+            foreach (var projectile in FindObjectsOfType<Raulworks.RW_Base_Projectile>())
+                AddProjectileSnapshot(projectile, output);
+            foreach (var projectile in FindObjectsOfType<Raulworks.RW_Gat_Projectile>())
+                AddProjectileSnapshot(projectile, output);
+            foreach (var projectile in FindObjectsOfType<Raulworks.RW_RocketProjectile>())
+                AddProjectileSnapshot(projectile, output);
+            return output;
+        }
+
+        private static void AddProjectileSnapshot(MonoBehaviour projectile, System.Collections.Generic.List<LocalProjectileSnapshot> output)
+        {
+            if (ProjectileHelper.TrySnapshot(projectile, out LocalProjectileSnapshot snapshot))
+                output.Add(snapshot);
+        }
+
+        private void CleanupRemoteProjectiles()
+        {
+            var expired = new System.Collections.Generic.List<string>();
+            foreach (var pair in _remoteProjectiles)
+                if (pair.Value == null) expired.Add(pair.Key);
+            foreach (string key in expired)
+                _remoteProjectiles.Remove(key);
+        }
+
+        public void ForgetRemoteProjectile(ulong steamId, int instanceId, RemoteProjectile projectile)
+        {
+            string key = steamId + ":" + instanceId;
+            if (_remoteProjectiles.TryGetValue(key, out RemoteProjectile current) && current == projectile)
+                _remoteProjectiles.Remove(key);
         }
 
         public void LeaveLobby()
@@ -340,5 +550,147 @@ namespace MHZombieMultiplayer
             IsHost = false;
             LobbyId = default;
         }
+    }
+
+    public class RemoteProjectile : MonoBehaviour
+    {
+        public ulong SteamId;
+        public int InstanceId;
+        public ProjectileKind Kind;
+        public float Damage;
+
+        private Vector3 _targetPosition;
+        private Quaternion _targetRotation;
+        private Vector3 _velocity;
+        private float _lifeSeconds;
+        private bool _receivedState;
+        private bool _hasHit;
+
+        public Vector3 Position => transform.position;
+        public Quaternion Rotation => transform.rotation;
+        public Vector3 Velocity => _velocity;
+        public float LifeSeconds => _lifeSeconds;
+
+        private void Start()
+        {
+            _targetPosition = transform.position;
+            _targetRotation = transform.rotation;
+        }
+
+        private void Update()
+        {
+            if (_lifeSeconds <= 0f)
+            {
+                if (gameObject != null)
+                    Destroy(gameObject);
+                return;
+            }
+
+            _lifeSeconds -= Time.deltaTime;
+            // Continue from the latest velocity between packet snapshots, then
+            // apply a gentle correction when the next snapshot arrives.
+            transform.position += _velocity * Time.deltaTime;
+            transform.position = Vector3.Lerp(transform.position, _targetPosition, 10f * Time.deltaTime);
+            transform.rotation = Quaternion.Slerp(transform.rotation, _targetRotation, 20f * Time.deltaTime);
+
+            if (_lifeSeconds <= 0f && gameObject != null)
+                Destroy(gameObject);
+        }
+
+        public void ApplyState(ProjectileStatePacket packet)
+        {
+            if (!_receivedState)
+            {
+                transform.position = packet.Position;
+                transform.rotation = packet.Rotation;
+                _receivedState = true;
+            }
+            _targetPosition = packet.Position;
+            _targetRotation = packet.Rotation;
+            _velocity = packet.Velocity;
+            _lifeSeconds = packet.LifeSeconds;
+            Kind = packet.Kind;
+            Damage = packet.Damage;
+
+            if (gameObject != null)
+                gameObject.SetActive(true);
+        }
+
+        public void CreateVisual()
+        {
+            GameObject body = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            body.name = "ProjectileVisual";
+            body.transform.SetParent(transform, false);
+            UnityEngine.Object.Destroy(body.GetComponent<Collider>());
+
+            // Bigger + brighter visuals so other players' shots are actually seeable.
+            float size = Kind == ProjectileKind.Rocket ? 0.55f : Kind == ProjectileKind.Gat ? 0.35f : 0.38f;
+            Color color = Kind == ProjectileKind.Rocket ? new Color(1f, 0.35f, 0.10f) :
+                          Kind == ProjectileKind.Gat ? new Color(1f, 0.85f, 0.20f) : new Color(1f, 0.95f, 0.45f);
+            body.transform.localScale = Vector3.one * size;
+            Renderer renderer = body.GetComponent<Renderer>();
+            Shader shader = Shader.Find("Legacy Shaders/Self-Illumin/VertexLit") ?? Shader.Find("Standard");
+            if (renderer != null && shader != null)
+            {
+                renderer.material = new Material(shader);
+                if (renderer.material.HasProperty("_Color")) renderer.material.color = color;
+                if (renderer.material.HasProperty("_EmissionColor")) renderer.material.SetColor("_EmissionColor", color);
+            }
+
+            TrailRenderer trail = body.AddComponent<TrailRenderer>();
+            trail.time = Kind == ProjectileKind.Rocket ? 0.5f : 0.45f;
+            trail.startWidth = size * 0.8f;
+            trail.endWidth = 0.01f;
+            trail.startColor = color;
+            trail.endColor = new Color(color.r, color.g, color.b, 0f);
+            trail.material = renderer != null ? renderer.material : null;
+        }
+
+        private void OnTriggerEnter(Collider other)
+        {
+            LocalPlayerCombat local = other != null ? other.GetComponentInParent<LocalPlayerCombat>() : null;
+            if (local != null)
+                TryHitLocalPlayer(local);
+        }
+
+        public void TryHitLocalPlayer()
+        {
+            LocalPlayerCombat local = LocalPlayerCombat.EnsureAttached();
+            if (local != null) TryHitLocalPlayer(local);
+        }
+
+        private void TryHitLocalPlayer(LocalPlayerCombat local)
+        {
+            if (_hasHit || local == null) return;
+
+            _hasHit = local.ReceiveRemoteHit(SteamId, InstanceId, Damage, Kind);
+            if (_hasHit && gameObject != null)
+                Destroy(gameObject);
+        }
+
+        private void OnDestroy()
+        {
+            NetworkManager.Instance?.ForgetRemoteProjectile(SteamId, InstanceId, this);
+        }
+    }
+
+    public struct ProjectileStateSnapshot
+    {
+        public int InstanceId;
+        public Vector3 Position;
+        public Quaternion Rotation;
+        public Vector3 Velocity;
+        public float LifeSeconds;
+    }
+
+    public struct LocalProjectileSnapshot
+    {
+        public int InstanceId;
+        public Vector3 Position;
+        public Quaternion Rotation;
+        public Vector3 Velocity;
+        public float LifeSeconds;
+        public ProjectileKind Kind;
+        public float Damage;
     }
 }

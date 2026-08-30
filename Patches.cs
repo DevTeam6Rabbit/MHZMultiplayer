@@ -1,4 +1,8 @@
 using HarmonyLib;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Reflection;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
@@ -9,6 +13,110 @@ namespace MHZombieMultiplayer
     // because of exactly that.
     public static class Patches
     {
+        private static bool _projectileHooksInstalled;
+        private static bool _deathHookInstalled;
+
+        public static void InstallRuntimeProjectileHooks()
+        {
+            if (_projectileHooksInstalled) return;
+            try
+            {
+                var harmony = new Harmony("com.mhzombie.multiplayer.runtime.projectiles");
+                var postfix = new HarmonyMethod(typeof(RuntimeProjectileHook).GetMethod(nameof(RuntimeProjectileHook.Postfix), BindingFlags.Static | BindingFlags.Public));
+                PatchProjectileFire(harmony, typeof(Raulworks.RW_Base_Projectile), postfix);
+                PatchProjectileFire(harmony, typeof(Raulworks.RW_Gat_Projectile), postfix);
+                PatchProjectileFire(harmony, typeof(Raulworks.RW_RocketProjectile), postfix);
+                _projectileHooksInstalled = true;
+                MultiplayerPlugin.Log.LogInfo("[ProjectileHook] Hooked base, gatling, and rocket fire events.");
+            }
+            catch (Exception ex)
+            {
+                MultiplayerPlugin.Log.LogWarning($"[ProjectileHook] installation failed: {ex.Message}");
+            }
+        }
+
+        private static void PatchProjectileFire(Harmony harmony, Type projectileType, HarmonyMethod postfix)
+        {
+            MethodInfo fire = projectileType.GetMethod("FireProjectile", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            if (fire == null)
+                throw new MissingMethodException(projectileType.FullName, "FireProjectile");
+            harmony.Patch(fire, postfix: postfix);
+        }
+
+        // Installs a postfix on RW_On_Death.Die() so an in-game death (crash,
+        // killed by the level) resets the local player's PvP health to full on
+        // respawn. Installed at runtime like the projectile hooks so a missing
+        // type/method can't kill the other patches.
+        public static void InstallRuntimeDeathHook()
+        {
+            if (_deathHookInstalled) return;
+            try
+            {
+                var type = TimeTrialHook.FindGameType("Raulworks.RW_On_Death", "RW_On_Death");
+                if (type == null)
+                {
+                    MultiplayerPlugin.Log.LogWarning("[DeathHook] RW_On_Death type not found; skipping.");
+                    return;
+                }
+
+                MethodInfo die = type.GetMethod("Die", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                if (die == null)
+                {
+                    MultiplayerPlugin.Log.LogWarning("[DeathHook] RW_On_Death.Die not found; skipping.");
+                    return;
+                }
+
+                var harmony = new Harmony("com.mhzombie.multiplayer.runtime.death");
+                var postfix = new HarmonyMethod(typeof(RuntimeDeathHook).GetMethod(nameof(RuntimeDeathHook.Postfix), BindingFlags.Static | BindingFlags.Public));
+                harmony.Patch(die, postfix: postfix);
+                _deathHookInstalled = true;
+                MultiplayerPlugin.Log.LogInfo("[DeathHook] Hooked RW_On_Death.Die to reset PvP health on respawn.");
+            }
+            catch (Exception ex)
+            {
+                MultiplayerPlugin.Log.LogWarning($"[DeathHook] installation failed: {ex.Message}");
+            }
+        }
+
+        public static class RuntimeDeathHook
+        {
+            public static void Postfix()
+            {
+                try
+                {
+                    var combat = LocalPlayerCombat.EnsureAttached();
+                    if (combat != null)
+                        combat.ResetHealth();
+                }
+                catch (Exception ex)
+                {
+                    MultiplayerPlugin.Log.LogWarning($"[DeathHook] postfix failure: {ex.Message}");
+                }
+            }
+        }
+
+        public static class RuntimeProjectileHook
+        {
+            public static void Postfix(MonoBehaviour __instance)
+            {
+                if (NetworkManager.Instance == null || !NetworkManager.Instance.IsConnected)
+                    return;
+
+                try
+                {
+                    if (__instance == null) return;
+                    var obj = __instance.gameObject;
+                    if (obj == null || obj.name.Contains("RemoteProjectile_") || obj.name.Contains("RemoteHeli_"))
+                        return;
+                    NetworkManager.Instance.SendProjectileSnapshot(__instance);
+                }
+                catch (Exception ex)
+                {
+                    MultiplayerPlugin.Log.LogWarning($"[ProjectileHook] prefix failure: {ex.Message}");
+                }
+            }
+        }
+
         // Patch RW_Game_Manager.Start to inject our UI when a game scene loads.
         // This runs after the game sets itself up, so our components can find everything.
         [HarmonyPatch]
@@ -42,12 +150,13 @@ namespace MHZombieMultiplayer
                 {
                     var uiObj = new GameObject("MHZ_MultiplayerUI");
                     uiObj.AddComponent<LobbyUI>();
-                    Object.DontDestroyOnLoad(uiObj);
+                    UnityEngine.Object.DontDestroyOnLoad(uiObj);
                     MultiplayerPlugin.Log.LogInfo("Lobby UI spawned.");
                 }
 
                 // Install the time trial finish hook (safe to call repeatedly)
                 TimeTrialHook.Install();
+                InstallRuntimeProjectileHooks();
 
                 MultiplayerPlugin.Log.LogInfo("Game scene loaded — multiplayer ready.");
             }
