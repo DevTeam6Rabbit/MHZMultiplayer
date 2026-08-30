@@ -6,20 +6,16 @@ using UnityEngine;
 namespace MHZombieMultiplayer
 {
     // Old-school IMGUI HUD, themed by UiTheme so it can't clash with the game's
-    // own UI. Windows are placed so they don't overlap:
-    //   - Multiplayer (F8)   : top-left       - connection + players + actions
-    //   - Scoreboard  (F3)   : right edge     - PvP combat + time trial tables
-    //   - Chat        (F4)   : bottom-left    - message log + input
-    //   - PvP health bar     : bottom-center  - always visible
-    // Every window has a header bar with a close (×) button; scoreboard/chat
-    // are on by default.
+    // own UI. All windows are permanently visible (no hotkeys / buttons to show
+    // or hide them) and are not draggable - they sit in fixed spots that don't
+    // overlap:
+    //   - Multiplayer  : top-left       - connection + players + actions
+    //   - Scoreboard   : right edge     - PvP combat + time trial tables
+    //   - Chat         : bottom-left    - message log + input
+    //   - PvP health bar : bottom-center - always visible
     public class LobbyUI : MonoBehaviour
     {
         public static LobbyUI Instance { get; private set; }
-
-        private bool _showPanel = false;        // F8
-        private bool _showChat = true;          // F4
-        private bool _showScoreboard = true;    // F3
 
         private string _joinLobbyIdInput = "";
 
@@ -27,9 +23,9 @@ namespace MHZombieMultiplayer
         private string _chatInput = "";
         private Vector2 _chatScroll;
 
-        private Rect _panelRect = new Rect(20, 20, 360, 430);
-        private Rect _chatRect = new Rect(-1, -1, 360, 240);     // positioned on first draw
-        private Rect _scoreRect = new Rect(-1, -1, 320, 380);    // positioned on first draw
+        private readonly Rect _panelRect = new Rect(20, 20, 360, 320);
+        private readonly Rect _chatRect = new Rect(20, Screen.height - 240 - 20, 360, 240);
+        private readonly Rect _scoreRect = new Rect(Screen.width - 320 - 20, 20, 320, 380);
 
         private void Awake()
         {
@@ -40,17 +36,12 @@ namespace MHZombieMultiplayer
 
         private void Update()
         {
-            if (Input.GetKeyDown(KeyCode.F8)) _showPanel = !_showPanel;
-            if (Input.GetKeyDown(KeyCode.F3)) _showScoreboard = !_showScoreboard;
-            if (Input.GetKeyDown(KeyCode.F4)) _showChat = !_showChat;
-
             if (Input.GetKeyDown(KeyCode.F9) && NetworkManager.Instance != null)
                 NetworkManager.Instance.HostLobby();
 
             if (Input.GetKeyDown(KeyCode.F10) && NetworkManager.Instance != null)
             {
                 NetworkManager.Instance.LeaveLobby();
-                _showChat = false;
                 _chatMessages.Clear();
             }
         }
@@ -60,52 +51,35 @@ namespace MHZombieMultiplayer
             UiTheme.Apply();
             DrawPvPHealthBar();
 
-            if (_showPanel)
-            {
-                _panelRect = GUILayout.Window(9001, _panelRect, DrawLobbyPanel, "", UiTheme.Window);
-                UiTheme.DrawOutline(_panelRect, UiTheme.Outline);
-            }
+            GUILayout.Window(9001, _panelRect, DrawLobbyPanel, "", UiTheme.Window);
+            UiTheme.DrawOutline(_panelRect, UiTheme.Outline);
 
-            if (_showChat)
-            {
-                if (_chatRect.x < 0) // bottom-left on first draw
-                    _chatRect = new Rect(20, Screen.height - _chatRect.height - 20,
-                                         _chatRect.width, _chatRect.height);
-                _chatRect = GUILayout.Window(9002, _chatRect, DrawChatPanel, "", UiTheme.Window);
-                UiTheme.DrawOutline(_chatRect, UiTheme.Outline);
-            }
+            GUILayout.Window(9002, _chatRect, DrawChatPanel, "", UiTheme.Window);
+            UiTheme.DrawOutline(_chatRect, UiTheme.Outline);
 
-            if (_showScoreboard)
-            {
-                if (_scoreRect.x < 0) // dock to the right edge on first draw
-                    _scoreRect = new Rect(Screen.width - _scoreRect.width - 20, 20,
-                                          _scoreRect.width, _scoreRect.height);
-                _scoreRect = GUILayout.Window(9003, _scoreRect, DrawScoreboardPanel, "", UiTheme.Window);
-                UiTheme.DrawOutline(_scoreRect, UiTheme.Outline);
-            }
+            GUILayout.Window(9003, _scoreRect, DrawScoreboardPanel, "", UiTheme.Window);
+            UiTheme.DrawOutline(_scoreRect, UiTheme.Outline);
         }
 
-        // A window's title band (with a close button) + accent underline, drawn
-        // as the first elements of the window's content.
-        private void DrawWindowHeader(string title, Action onClose)
+        // A window's title band + accent underline, drawn as the first element
+        // of the window's content. No close button - windows are permanent.
+        private void DrawWindowHeader(string title)
         {
             GUILayout.BeginHorizontal(UiTheme.HeaderBar);
             GUILayout.Label(title, UiTheme.HeaderTitle);
             GUILayout.FlexibleSpace();
-            if (GUILayout.Button("×", UiTheme.CloseButton))
-                onClose?.Invoke();
             GUILayout.EndHorizontal();
             GUILayout.Box("", UiTheme.Hr);
             GUILayout.Space(6);
         }
 
-        // ── Multiplayer hub ──────────────────────────────────────────────────
+        // ── Multiplayer ─────────────────────────────────────────────────────
         private void DrawLobbyPanel(int id)
         {
-            DrawWindowHeader("Multiplayer", () => _showPanel = false);
+            DrawWindowHeader("Multiplayer");
 
             var nm = NetworkManager.Instance;
-            if (nm == null) { GUILayout.Label("NetworkManager not loaded."); GUI.DragWindow(); return; }
+            if (nm == null) { GUILayout.Label("NetworkManager not loaded."); return; }
 
             GUILayout.Label($"Player: {SteamFriends.GetPersonaName()}");
             SectionSpace();
@@ -116,9 +90,7 @@ namespace MHZombieMultiplayer
                 DrawLobbySection(nm);
 
             SectionSpace();
-            GUILayout.Label("F8 lobby · F9 host · F10 leave · F3 board · F4 chat", UiTheme.Dim);
-
-            GUI.DragWindow();
+            GUILayout.Label("F9 host · F10 leave", UiTheme.Dim);
         }
 
         private void DrawConnectionSection(NetworkManager nm)
@@ -168,17 +140,9 @@ namespace MHZombieMultiplayer
                 }
 
             SectionSpace();
-            GUILayout.BeginHorizontal();
-            if (GUILayout.Button(_showChat ? "Hide Chat" : "Show Chat"))
-                _showChat = !_showChat;
-            if (GUILayout.Button(_showScoreboard ? "Hide Board" : "Show Board"))
-                _showScoreboard = !_showScoreboard;
-            GUILayout.EndHorizontal();
-
             if (GUILayout.Button("Leave Lobby  (F10)"))
             {
                 nm.LeaveLobby();
-                _showChat = false;
                 _chatMessages.Clear();
             }
         }
@@ -186,7 +150,7 @@ namespace MHZombieMultiplayer
         // ── Scoreboard ──────────────────────────────────────────────────────
         private void DrawScoreboardPanel(int id)
         {
-            DrawWindowHeader("Scoreboard", () => _showScoreboard = false);
+            DrawWindowHeader("Scoreboard");
 
             GUILayout.Label("PvP Combat", UiTheme.Header);
             var pvp = ScoreboardManager.GetPvPEntries();
@@ -226,14 +190,8 @@ namespace MHZombieMultiplayer
             }
 
             SectionSpace();
-            GUILayout.BeginHorizontal();
             if (GUILayout.Button("Clear"))
                 ScoreboardManager.Clear();
-            if (GUILayout.Button("Hide"))
-                _showScoreboard = false;
-            GUILayout.EndHorizontal();
-
-            GUI.DragWindow();
         }
 
         private static void HeaderRow(string c1, string c2, string c3, string c4)
@@ -259,7 +217,7 @@ namespace MHZombieMultiplayer
         // ── Chat ────────────────────────────────────────────────────────────
         private void DrawChatPanel(int id)
         {
-            DrawWindowHeader("Chat", () => _showChat = false);
+            DrawWindowHeader("Chat");
 
             _chatScroll = GUILayout.BeginScrollView(_chatScroll, GUILayout.Height(130));
             foreach (string msg in _chatMessages)
@@ -275,8 +233,6 @@ namespace MHZombieMultiplayer
                 _chatInput = "";
             }
             GUILayout.EndHorizontal();
-
-            GUI.DragWindow();
         }
 
         // ── PvP health bar (always visible) ─────────────────────────────────
@@ -312,14 +268,12 @@ namespace MHZombieMultiplayer
 
         private static void SectionSpace() => GUILayout.Space(8);
 
-        // ── Public API ──────────────────────────────────────────────────────
-        public void ShowScoreboard() => _showScoreboard = true;
-        public void ShowChat() => _showChat = true;
+        // ── Public API (kept for compatibility; windows are permanent) ──────
+        public void ShowScoreboard() { }
+        public void ShowChat() { }
 
         public void ShowHostedLobby(CSteamID lobbyId)
         {
-            _showPanel = true;
-            _showChat = true;
             AddChatMessage($"[System] Lobby created! ID: {lobbyId}");
         }
 

@@ -12,7 +12,9 @@ namespace MHZombieMultiplayer
         // --- Palette (clean dark, cyan accent to match the nametags) ---
         public static readonly Color Bg        = Hex("1B1C1F");
         public static readonly Color BgRaised  = Hex("26272C");
-        public static readonly Color BgField   = Hex("131417");
+        public static readonly Color BgField     = Hex("131417");
+        public static readonly Color FieldBg     = Hex("36383F"); // opaque, clearly lighter input bg
+        public static readonly Color FieldBorder = Hex("565860"); // visible input outline
         public static readonly Color Border    = Hex("37383F");
         public static readonly Color Text      = Hex("E6E6EA");
         public static readonly Color TextDim   = Hex("9A9AA3");
@@ -50,6 +52,9 @@ namespace MHZombieMultiplayer
         private static void Build()
         {
             _skin = ScriptableObject.CreateInstance<GUISkin>();
+            // Keep the runtime skin alive across scene loads so the window
+            // backgrounds don't "unrender" once the main menu scene loads.
+            _skin.hideFlags = HideFlags.HideAndDontSave;
 
             Font font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
             if (font == null) font = Resources.GetBuiltinResource<Font>("Arial.ttf");
@@ -184,9 +189,9 @@ namespace MHZombieMultiplayer
         {
             return new GUIStyle
             {
-                normal = { background = Frame(Border, BgField), textColor = Text },
-                focused = { background = Frame(Accent, BgField), textColor = Text },
-                hover = { background = Frame(Border, BgField), textColor = Text },
+                normal = { background = Frame(FieldBorder, FieldBg), textColor = Text },
+                focused = { background = Frame(Accent, FieldBg), textColor = Text },
+                hover = { background = Frame(FieldBorder, FieldBg), textColor = Text },
                 fontSize = 13,
                 alignment = TextAnchor.MiddleLeft,
                 border = new RectOffset(1, 1, 1, 1),
@@ -279,6 +284,7 @@ namespace MHZombieMultiplayer
         {
             if (_solidCache.TryGetValue(c, out Texture2D tex)) return tex;
             tex = new Texture2D(1, 1) { filterMode = FilterMode.Point, wrapMode = TextureWrapMode.Clamp };
+            tex.hideFlags = HideFlags.HideAndDontSave;
             tex.SetPixel(0, 0, c);
             tex.Apply();
             _solidCache[c] = tex;
@@ -308,6 +314,7 @@ namespace MHZombieMultiplayer
         private static Texture2D Frame(Color edge, Color fill)
         {
             var tex = new Texture2D(3, 3) { filterMode = FilterMode.Point, wrapMode = TextureWrapMode.Clamp };
+            tex.hideFlags = HideFlags.HideAndDontSave;
             for (int y = 0; y < 3; y++)
                 for (int x = 0; x < 3; x++)
                 {
